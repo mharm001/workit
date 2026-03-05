@@ -74,7 +74,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "1.3.0";
+  const APP_VERSION = "1.5.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -707,10 +707,48 @@
                 " scope — your data lives in a private Google Sheet only this app can access."),
             ),
           ),
-          // Footer
-          e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24 } },
-            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "harmant.app/workit"),
-            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "v" + APP_VERSION),
+          // ── Info sections below card ──
+          e("div", { style: { marginTop: 32, display: "flex", flexDirection: "column", gap: 20 } },
+            // What is Workit
+            e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 20 } },
+              e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "#525252", marginBottom: 10 } }, "What is Workit?"),
+              e("p", { style: { fontSize: 12, color: "#71717a", lineHeight: 1.6, margin: 0 } },
+                "A free workout tracker that saves your data to a Google Sheet you own. Create custom workouts, log reps, weight, and effort per set, and track your progress over time. Works offline \u2014 syncs when you\u2019re back online."),
+            ),
+            // Privacy & Trust
+            e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 20 } },
+              e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "#525252", marginBottom: 12 } }, "Privacy & Trust"),
+              e("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+                [
+                  ["\uD83D\uDD12", "Minimal access", "Only touches the single spreadsheet it creates. Cannot see any other files in your Drive."],
+                  ["\uD83D\uDEAB", "No server", "Static site on GitHub Pages. No backend, no analytics, no cookies, no data collected."],
+                  ["\uD83D\uDCC4", "You own it", "Your data lives in a standard Google Sheet. View, edit, or delete it anytime."],
+                ].map(function(item) {
+                  return e("div", { key: item[1], style: { display: "flex", gap: 10, alignItems: "flex-start" } },
+                    e("span", { style: { fontSize: 14, minWidth: 20 } }, item[0]),
+                    e("div", null,
+                      e("div", { style: { fontSize: 12, fontWeight: 500, color: "#a1a1aa" } }, item[1]),
+                      e("div", { style: { fontSize: 11, color: "#525252", lineHeight: 1.4, marginTop: 1 } }, item[2]),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            // Install as App
+            e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 20 } },
+              e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "#525252", marginBottom: 10 } }, "Install as App"),
+              e("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+                e("div", { style: { fontSize: 12, color: "#71717a", lineHeight: 1.5 } },
+                  e("strong", { style: { color: "#a1a1aa" } }, "iPhone: "), "Safari \u2192 Share \u2192 Add to Home Screen"),
+                e("div", { style: { fontSize: 12, color: "#71717a", lineHeight: 1.5 } },
+                  e("strong", { style: { color: "#a1a1aa" } }, "Android: "), "Chrome \u2192 \u22EE Menu \u2192 Add to Home screen"),
+              ),
+            ),
+            // Version footer
+            e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" } },
+              e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "harmant.app/workit"),
+              e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "v" + APP_VERSION),
+            ),
           ),
         ),
       )
@@ -729,20 +767,20 @@
   // ═══════════════════════════════════════════════════════════════════
   // NAV
   // ═══════════════════════════════════════════════════════════════════
-  function NavBar({ activeView, dispatch, user, onSignOut, syncing, syncStatus, onReconnect }) {
+  function NavBar({ activeView, dispatch, user, isConnected, onSignOut, syncing, syncStatus, onReconnect }) {
     const tabs = [{id:"dashboard",label:"Home",icon:"🏠"},{id:"schedule",label:"Schedule",icon:"📅"},{id:"workouts",label:"Workouts",icon:"💪"},{id:"analytics",label:"Stats",icon:"📊"},{id:"settings",label:"Data",icon:"⚙️"}];
     const statusDot = syncStatus === "synced" ? "#4ade80" : syncStatus === "offline" ? "#facc15" : syncStatus === "error" ? "#ef4444" : "#71717a";
-    const statusText = syncStatus === "synced" ? "Synced" : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync error" : "";
+    const statusText = syncing ? "" : syncStatus === "synced" ? "Synced" : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync error" : "";
     return e("div", { style: { position: "sticky", top: 0, zIndex: 50 } },
       e("div", { className: "user-bar" },
         e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-          user && user.picture && e("img", { src: user.picture, alt: "" }),
-          e("span", { style: { fontSize: 12, color: "#a1a1aa" } }, (user && (user.name || user.email)) || "Offline"),
+          user && user.picture && e("img", { src: user.picture, alt: "", style: { width: 20, height: 20, borderRadius: "50%" } }),
+          e("span", { style: { fontSize: 12, color: "#a1a1aa" } }, isConnected ? (user && (user.name || user.email)) || "Connected" : "Offline"),
           syncing && e("div", { className: "spinner", style: { width: 12, height: 12, borderWidth: 2 } }),
-          !syncing && statusText && e("span", { style: { fontSize: 10, color: statusDot, display: "flex", alignItems: "center", gap: 3 } },
+          statusText && e("span", { style: { fontSize: 10, color: statusDot, display: "flex", alignItems: "center", gap: 3 } },
             e("span", { style: { width: 6, height: 6, borderRadius: "50%", background: statusDot, display: "inline-block" } }), statusText),
         ),
-        user
+        isConnected
           ? e("button", { onClick: onSignOut, style: { background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer" } }, "Sign out")
           : e("button", { onClick: onReconnect, style: { background: "none", border: "none", color: "#f97316", fontSize: 12, cursor: "pointer" } }, "Sign in"),
       ),
@@ -1268,6 +1306,78 @@
             e("span", { className: "text-muted" }, l), e("span", null, v))
         ),
       ),
+      // ── How It Works ──
+      e("div", { className: "card" },
+        e("div", { className: "label" }, "How It Works"),
+        e("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
+          [
+            ["1.", "Create workouts", "Define exercises, sets, and reps in the Workouts tab. Choose from 200+ exercises across 12 muscle groups."],
+            ["2.", "Set your schedule", "Use Weekly mode to assign workouts to specific days, or Split mode to rotate through a cycle."],
+            ["3.", "Track daily", "Open the app, start today's workout, and log your reps, weight, and effort (1\u201310) per set."],
+            ["4.", "Review progress", "Check the Stats tab for trends in volume, weight, and effort over time."],
+          ].map(function(item) {
+            return e("div", { key: item[0], style: { display: "flex", gap: 10 } },
+              e("div", { style: { fontSize: 13, fontWeight: 700, color: "#f97316", minWidth: 20 } }, item[0]),
+              e("div", null,
+                e("div", { style: { fontSize: 13, fontWeight: 500, color: "#e4e4e7" } }, item[1]),
+                e("div", { style: { fontSize: 11, color: "#71717a", lineHeight: 1.4, marginTop: 2 } }, item[2]),
+              ),
+            );
+          }),
+        ),
+      ),
+      // ── Privacy & Security ──
+      e("div", { className: "card" },
+        e("div", { className: "label" }, "Privacy & Security"),
+        e("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+          [
+            ["\uD83D\uDD12", "Minimal permissions", "Uses Google's drive.file scope \u2014 the app can only access the single spreadsheet it creates. It cannot see, read, or modify any other files in your Google Drive."],
+            ["\uD83D\uDCF1", "Works offline", "All data is cached locally on your device. You can track workouts without internet. Data syncs to Google Sheets when you're online."],
+            ["\uD83D\uDCC4", "You own your data", "Everything is stored in a standard Google Sheet in your own Google account. You can view, edit, export, or delete it anytime."],
+            ["\uD83D\uDEAB", "No server, no tracking", "Workit is a static web app hosted on GitHub Pages. There is no backend server. No analytics, no cookies, no personal data collected."],
+            ["\uD83D\uDD11", "Token-based auth", "Sign-in uses Google OAuth2. Your token is only stored in browser memory (not saved to disk). When it expires, you sign in again."],
+          ].map(function(item) {
+            return e("div", { key: item[1], style: { display: "flex", gap: 10 } },
+              e("div", { style: { fontSize: 16, minWidth: 24, textAlign: "center" } }, item[0]),
+              e("div", null,
+                e("div", { style: { fontSize: 13, fontWeight: 500, color: "#e4e4e7" } }, item[1]),
+                e("div", { style: { fontSize: 11, color: "#71717a", lineHeight: 1.4, marginTop: 2 } }, item[2]),
+              ),
+            );
+          }),
+        ),
+      ),
+      // ── Install as App ──
+      e("div", { className: "card" },
+        e("div", { className: "label" }, "Install as App"),
+        e("div", { style: { fontSize: 12, color: "#a1a1aa", lineHeight: 1.5, marginBottom: 12 } }, "Add Workit to your phone's home screen for a full-screen, app-like experience with no browser bar."),
+        e("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
+          e("div", null,
+            e("div", { style: { fontSize: 13, fontWeight: 600, color: "#e4e4e7", marginBottom: 4 } }, "iPhone / iPad (Safari)"),
+            e("div", { style: { fontSize: 11, color: "#71717a", lineHeight: 1.6 } },
+              "1. Open harmant.app/workit in Safari", e("br"),
+              "2. Tap the Share button (square with arrow)", e("br"),
+              "3. Scroll down and tap \"Add to Home Screen\"", e("br"),
+              "4. Tap \"Add\" \u2014 done!"),
+          ),
+          e("hr", { style: { border: "none", borderTop: "1px solid #3f3f46" } }),
+          e("div", null,
+            e("div", { style: { fontSize: 13, fontWeight: 600, color: "#e4e4e7", marginBottom: 4 } }, "Android (Chrome)"),
+            e("div", { style: { fontSize: 11, color: "#71717a", lineHeight: 1.6 } },
+              "1. Open harmant.app/workit in Chrome", e("br"),
+              "2. Tap the three-dot menu (\u22EE) in the top right", e("br"),
+              "3. Tap \"Add to Home screen\" or \"Install app\"", e("br"),
+              "4. Tap \"Add\" \u2014 done!"),
+          ),
+          e("hr", { style: { border: "none", borderTop: "1px solid #3f3f46" } }),
+          e("div", null,
+            e("div", { style: { fontSize: 13, fontWeight: 600, color: "#e4e4e7", marginBottom: 4 } }, "Share with friends"),
+            e("div", { style: { fontSize: 11, color: "#71717a", lineHeight: 1.6 } },
+              "Just share the link: harmant.app/workit \u2014 anyone can use it for free. Each person's data stays in their own Google Sheet."),
+          ),
+        ),
+      ),
+      // ── About ──
       e("div", { className: "card", style: { textAlign: "center" } },
         e("div", { style: { fontSize: 24, marginBottom: 4 } }, "\uD83C\uDFCB\uFE0F"),
         e("div", { style: { fontSize: 16, fontWeight: 700, marginBottom: 2 } }, "Workit"),
@@ -1403,7 +1513,7 @@
       state.activeView === "tracking" && state.trackingSession
         ? e(TrackingSession, { state, dispatch })
         : [
-          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, user, onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect }),
+          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, user, isConnected: authState==="ready", onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect }),
           e("div", { key: "content", style: { paddingBottom: 80 } },
             state.activeView === "dashboard" && e(Dashboard, { state, dispatch }),
             state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch }),
