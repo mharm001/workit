@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.19.0";
+  const APP_VERSION = "2.20.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1935,7 +1935,7 @@
     // ── 5a. Auto-reconnect when data changes while offline (save, edit, delete workout, log weight)
     const prevHistoryHash = useRef(null);
     useEffect(() => {
-      var histHash = state.history.length + ":" + state.history.map(h=>h.date+h.workoutId).join(",");
+      var histHash = JSON.stringify(state.history).length + ":" + state.history.length;
       var weightHash = state.weightLog.length;
       if (prevHistoryHash.current === null) { prevHistoryHash.current = histHash; prevHistory.current = state.history.length; prevWeightLog.current = weightHash; return; }
       var historyChanged = histHash !== prevHistoryHash.current;
