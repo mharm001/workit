@@ -1564,26 +1564,15 @@
     const syncTimeout = useRef(null);
     const prevState = useRef(null);
 
-    // ── 1. On mount: restore session if user was previously signed in
+    // ── 1. On mount: always start at login screen
     useEffect(() => {
-      const hadSession = localStorage.getItem("workit_session") === "active";
-      const cached = loadLocal();
-      if (hadSession && cached) {
-        const { trackingSession, ...data } = cached;
-        dispatch({type:"LOAD_FROM_SHEETS", data});
-        if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
-        prevState.current = { ...makeInitialState(), ...data };
-      }
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
-          setAuthState(hadSession && cached ? "offline" : "login");
+          setAuthState("login");
         }
       }, 200);
-      const fb = setTimeout(() => {
-        clearInterval(check);
-        setAuthState(hadSession && cached ? "offline" : "login");
-      }, 3000);
+      const fb = setTimeout(() => { clearInterval(check); setAuthState("login"); }, 3000);
       return () => { clearInterval(check); clearTimeout(fb); };
     }, []);
 
@@ -1633,7 +1622,6 @@
           prevState.current={...makeInitialState(),...remoteData};
         }
         setAuthState("ready"); setSyncStatus("synced");
-        try{localStorage.setItem("workit_session","active")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, []);
 
@@ -1647,8 +1635,6 @@
     const handleSignOut = useCallback(() => {
       // Don't revoke token — just clear it. Revoking forces consent screen on next sign-in.
       sheetsService.accessToken=null;sheetsService.spreadsheetId=null;
-      // Don't clear local data — keep it available for next sign-in
-      try{localStorage.removeItem("workit_session")}catch(e){}
       setAuthState("login"); setSyncStatus("");
     }, []);
 
