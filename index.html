@@ -74,7 +74,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.1.0";
+  const APP_VERSION = "2.2.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -484,6 +484,7 @@
         weeklySchedule: config.weeklySchedule || DAYS.map(function(d){return{day:d,workoutId:null}}),
         cadenceSchedule: config.cadenceSchedule || {restMode:"manual",autoRestEvery:3,rotation:[],currentIndex:0},
         workouts: workouts, history: history, weightLog: weightLog,
+        weightUnit: config.weightUnit || "lbs",
       };
     },
 
@@ -501,10 +502,12 @@
         ["scheduleType",JSON.stringify(state.scheduleType)],
         ["weeklySchedule",JSON.stringify(state.weeklySchedule)],
         ["cadenceSchedule",JSON.stringify(state.cadenceSchedule)],
-        ["workouts",JSON.stringify(state.workouts)]
+        ["workouts",JSON.stringify(state.workouts)],
+        ["weightUnit",JSON.stringify(state.weightUnit||"lbs")]
       ];
       const historyVals = this._flattenHistory(state.history);
-      const weightVals = [["Date","Weight (lbs)"]].concat(state.weightLog.map(function(w){return[w.date,String(w.weight)]}));
+      const unit = state.weightUnit||"lbs";
+      const weightVals = [["Date","Weight ("+unit+")"]].concat(state.weightLog.map(function(w){return[w.date,String(w.weight)]}));
       await Promise.all([
         this._clearAndWrite("config!A1:B200", configVals),
         this._clearAndWrite("history!A1:G50000", historyVals),
@@ -519,6 +522,7 @@
     weeklySchedule: DAYS.map(d => ({ day: d, workoutId: null })),
     cadenceSchedule: { restMode: "manual", autoRestEvery: 3, rotation: [], currentIndex: 0 },
     workouts: {}, history: [], weightLog: [],
+    weightUnit: "lbs",
     activeView: "dashboard", trackingSession: null,
   });
 
@@ -558,6 +562,7 @@
         return state;
       }
       case "LOG_WEIGHT": return { ...state, weightLog: [...state.weightLog.filter(w => w.date !== action.date), { date: action.date, weight: action.weight }].sort((a,b)=>a.date.localeCompare(b.date)) };
+      case "SET_WEIGHT_UNIT": return { ...state, weightUnit: action.unit };
       case "LOAD_FROM_SHEETS": return { ...state, ...action.data };
       case "IMPORT_STATE": return { ...action.state, activeView: "dashboard", trackingSession: null };
       default: return state;
@@ -839,7 +844,7 @@
       e("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
         e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, streak), e("div", { className: "stat-label" }, "Day Streak")),
         e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, state.history.length), e("div", { className: "stat-label" }, "Workouts")),
-        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, latestWeight ? latestWeight.weight : "—"), e("div", { className: "stat-label" }, "Weight")),
+        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, latestWeight ? latestWeight.weight : "—"), e("div", { className: "stat-label" }, latestWeight ? state.weightUnit : "Weight")),
       ),
       // Today's workout
       e("div", { className: "card" },
@@ -876,12 +881,17 @@
       ),
       // Weight log
       e("div", { className: "card" },
-        e("div", { className: "label" }, "Log Body Weight"),
-        e("div", { style: { display: "flex", gap: 8 } },
-          e("input", { name: "bodyWeight", type: "number", step: "0.1", placeholder: "lbs", value: weightInput, onInput: ev => setWeightInput(ev.target.value), className: "input", style: { flex: 1 } }),
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+          e("div", { className: "label", style: { margin: 0 } }, "Log Body Weight"),
+          e("div", { style: { display: "flex", background: "#27272a", borderRadius: 6, padding: 2 } },
+            ["lbs","kg"].map(u => e("button", { key: u, style: { padding: "3px 10px", borderRadius: 4, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer", background: state.weightUnit===u?"#f97316":"transparent", color: state.weightUnit===u?"#fff":"#71717a" }, onClick: () => dispatch({type:"SET_WEIGHT_UNIT",unit:u}) }, u))
+          ),
+        ),
+        e("div", { style: { display: "flex", gap: 8, marginTop: 8 } },
+          e("input", { name: "bodyWeight", type: "number", step: "0.1", placeholder: state.weightUnit, value: weightInput, onInput: ev => setWeightInput(ev.target.value), className: "input", style: { flex: 1 } }),
           e("button", { className: "btn btn-accent", onClick: logWeight }, "Log"),
         ),
-        state.weightLog.some(w => w.date === todayStr) && e("div", { style: { fontSize: 12, color: "#4ade80", marginTop: 8 } }, "Logged today: " + (state.weightLog.find(w => w.date === todayStr)||{}).weight + " lbs"),
+        state.weightLog.some(w => w.date === todayStr) && e("div", { style: { fontSize: 12, color: "#4ade80", marginTop: 8 } }, "Logged today: " + (state.weightLog.find(w => w.date === todayStr)||{}).weight + " " + state.weightUnit),
       ),
       // Last workout
       lastWorkout && e("div", { className: "card" },
@@ -1182,14 +1192,14 @@
         // Header row
         e("div", { style: { display: "grid", gridTemplateColumns: "24px 1fr 70px 1fr 24px", gap: 4, marginBottom: 4 } },
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
-          e("div", { style: { fontSize: 10, color: "#71717a" } }, "Weight"),
+          e("div", { style: { fontSize: 10, color: "#71717a" } }, state.weightUnit==="kg"?"kg":"lbs"),
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "Reps"),
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "Effort"),
           e("div"),
         ),
         ex.sets.map((set, si) => e("div", { key: si, style: { display: "grid", gridTemplateColumns: "24px 1fr 70px 1fr 24px", gap: 4, alignItems: "center", marginBottom: 4 } },
           e("div", { style: { fontSize: 12, color: "#71717a" } }, si+1),
-          e("input", { name: "setWeight", type: "number", min: 0, step: 2.5, value: set.weight, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
+          e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
           e("input", { name: "setReps", type: "number", min: 0, value: set.reps, onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
           e("div", { className: "effort-bar" },
             e("input", { name: "setEffort", type: "range", min: 1, max: 10, value: set.effort, onInput: ev => updSet(ei,si,"effort",parseInt(ev.target.value)) }),
@@ -1240,7 +1250,7 @@
       e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Analytics"),
       // Body weight
       weightData.length > 1 && e("div", { className: "card" },
-        e("div", { className: "label" }, "Body Weight Trend"),
+        e("div", { className: "label" }, "Body Weight (" + state.weightUnit + ")"),
         e(MiniLineChart, { data: weightData, dataKey: "weight", color: "#f97316", width: 340, height: 160 }),
       ),
       // Volume
@@ -1272,7 +1282,7 @@
         prs.slice(0, 10).map(([name, pr]) => e("div", { key: name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(63,63,70,0.5)", borderRadius: 8, padding: "8px 12px", marginBottom: 6 } },
           e("span", { style: { fontSize: 13, color: "#e4e4e7" } }, name),
           e("div", { style: { textAlign: "right" } },
-            e("span", { style: { fontSize: 13, fontWeight: 600, color: "#f97316" } }, pr.weight + " lbs"),
+            e("span", { style: { fontSize: 13, fontWeight: 600, color: "#f97316" } }, pr.weight + " " + state.weightUnit),
             e("span", { style: { fontSize: 11, color: "#71717a", marginLeft: 4 } }, "× " + pr.reps),
             e("div", { style: { fontSize: 11, color: "#52525b" } }, pr.date),
           ),
