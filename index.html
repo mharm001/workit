@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.28.0";
+  const APP_VERSION = "2.29.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1912,16 +1912,16 @@
         let id=await sheetsService.findSpreadsheet();
         if(!id) id=await sheetsService.createSpreadsheet();
         sheetsService.spreadsheetId=id;
-        // Merge: load from Sheets, but don't overwrite local data if it's newer
-        const remoteData=await sheetsService.loadAll();
+        // Merge strategy: if reconnecting from offline, local is source of truth (user was actively editing).
+        // If fresh login (no local data), pull from remote.
         const localData = loadLocal();
-        // If local has more history entries, prefer local (user was tracking offline)
-        if (localData && localData.history && localData.history.length > (remoteData.history||[]).length) {
-          // Local is ahead — push local to sheets
+        if (localData && localData.history) {
+          // Local data exists — push local to sheets (handles adds, edits, AND deletes)
           const pushState = { ...makeInitialState(), ...localData };
           await sheetsService.saveAll(pushState);
         } else {
-          // Remote is same or ahead — load remote
+          // No local data — pull from remote
+          const remoteData=await sheetsService.loadAll();
           dispatch({type:"LOAD_FROM_SHEETS",data:remoteData});
           prevState.current={...makeInitialState(),...remoteData};
         }
