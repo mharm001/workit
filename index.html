@@ -921,21 +921,54 @@
       ),
       // Today's workout
       e("div", { className: "card" },
-        todayW ? [
-          e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 } },
+        todayW ? (alreadyTracked ? [
+          // ── Completed summary ──
+          e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
             e("div", null,
-              e("div", { className: "label" }, alreadyTracked ? "Today's Workout — Completed" : "Today's Workout"),
+              e("div", { className: "label" }, "Today's Workout"),
               e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayW.name),
-              e("div", { className: "text-muted", style: { fontSize: 12 } }, alreadyTracked
-                ? todayEntry.exercises.reduce((a,ex) => a + ex.sets.filter(s=>!s.warmup).length, 0) + " sets logged"
-                : todayW.exercises.length + " exercises"),
             ),
-            alreadyTracked && e("span", { className: "pill", style: { background: "rgba(22,101,52,0.5)", color: "#86efac" } }, "Done"),
+            e("span", { style: { fontSize: 18, lineHeight: 1 } }, "\u2705"),
           ),
-          alreadyTracked ? e("div", { key: "b", style: { display: "flex", gap: 8 } },
+          e("div", { key: "s", style: { display: "flex", gap: 12, marginBottom: 10 } },
+            (() => {
+              const workSets = todayEntry.exercises.flatMap(ex => ex.sets.filter(s => !s.warmup));
+              const totalSets = workSets.length;
+              const totalVol = workSets.reduce((a, s) => a + s.reps * s.weight, 0);
+              const bestLift = todayEntry.exercises.reduce((best, ex) => {
+                const top = ex.sets.filter(s => !s.warmup).reduce((b, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b.score ? { name: ex.name, weight: s.weight, reps: s.reps, score: sc } : b; }, { score: 0 });
+                return top.score > best.score ? top : best;
+              }, { score: 0, name: "", weight: 0, reps: 0 });
+              return [
+                e("div", { key: "sets", style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
+                  e("div", { style: { fontSize: 16, fontWeight: 700, color: "#f4f4f5" } }, totalSets),
+                  e("div", { style: { fontSize: 10, color: "#71717a" } }, "sets"),
+                ),
+                e("div", { key: "vol", style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
+                  e("div", { style: { fontSize: 16, fontWeight: 700, color: "#f97316" } }, totalVol >= 1000 ? (totalVol/1000).toFixed(1) + "k" : totalVol),
+                  e("div", { style: { fontSize: 10, color: "#71717a" } }, "volume"),
+                ),
+                bestLift.score > 0 && e("div", { key: "best", style: { flex: 2, background: "#27272a", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
+                  e("div", { style: { fontSize: 14, fontWeight: 700, color: "#22d3ee" } }, bestLift.name.split(" ").slice(0,2).join(" ")),
+                  e("div", { style: { fontSize: 10, color: "#71717a" } }, bestLift.weight + state.weightUnit + " \u00d7 " + bestLift.reps + " = " + bestLift.score + " SS"),
+                ),
+              ];
+            })()
+          ),
+          e("div", { key: "b", style: { display: "flex", gap: 8 } },
             e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => editWorkout(todayEntry) }, "Edit Workout"),
             e("button", { className: "btn btn-dark", onClick: () => startTracking(todayWId) }, "Track Again"),
-          ) : e("div", { key: "b", style: { display: "flex", gap: 8 } },
+          ),
+        ] : [
+          // ── Not yet tracked ──
+          e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 } },
+            e("div", null,
+              e("div", { className: "label" }, "Today's Workout"),
+              e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayW.name),
+              e("div", { className: "text-muted", style: { fontSize: 12 } }, todayW.exercises.length + " exercises"),
+            ),
+          ),
+          e("div", { key: "b", style: { display: "flex", gap: 8 } },
             e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => startTracking(todayWId) }, "Track Workout"),
             e("button", { className: "btn btn-dark", onClick: () => setShowOverride(!showOverride) }, "Override"),
           ),
@@ -945,7 +978,7 @@
               e("button", { key: w.id, className: "btn btn-dark", style: { textAlign: "left", width: "100%" }, onClick: () => startTracking(w.id, true) }, w.name + " (" + w.exercises.length + " exercises)")
             ),
           ),
-        ] : e("div", { style: { textAlign: "center", padding: "24px 0" } },
+        ]) : e("div", { style: { textAlign: "center", padding: "24px 0" } },
           e("p", { className: "text-muted", style: { marginBottom: 12 } }, workoutList.length === 0 ? "No workouts created yet" : "Rest day"),
           workoutList.length === 0
             ? e("button", { className: "btn btn-accent", onClick: () => dispatch({type:"SET_VIEW",view:"workouts"}) }, "Create Your First Workout")
@@ -966,9 +999,9 @@
           ),
         ),
         e("div", { style: { display: "flex", gap: 8 } },
-          e("input", { name: "bodyWeight", type: "number", step: "0.1", placeholder: "Weight (" + state.weightUnit + ")", value: weightInput, onInput: ev => setWeightInput(ev.target.value), className: "input", style: { flex: 1 } }),
-          e("input", { name: "bodyFat", type: "number", step: "0.1", placeholder: "Body Fat %", value: bfInput, onInput: ev => setBfInput(ev.target.value), className: "input", style: { width: 90 } }),
-          e("button", { className: "btn btn-accent", onClick: logWeight }, "Log"),
+          e("input", { name: "bodyWeight", type: "number", step: "0.1", placeholder: "Weight (" + state.weightUnit + ")", value: weightInput, onInput: ev => setWeightInput(ev.target.value), className: "input", style: { flex: 3 } }),
+          e("input", { name: "bodyFat", type: "number", step: "0.1", placeholder: "BF %", value: bfInput, onInput: ev => setBfInput(ev.target.value), className: "input", style: { flex: 2 } }),
+          e("button", { className: "btn btn-accent", style: { whiteSpace: "nowrap" }, onClick: logWeight }, "Log"),
         ),
         state.weightLog.some(w => w.date === todayStr) && e("div", { style: { fontSize: 12, color: "#4ade80", marginTop: 8 } },
           (() => { const t = state.weightLog.find(w => w.date === todayStr); return "Today: " + (t.weight||"—") + " " + state.weightUnit + (t.bodyFat != null ? " · " + t.bodyFat + "% bf" : ""); })()
