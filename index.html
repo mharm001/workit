@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.9.0";
+  const APP_VERSION = "2.10.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -881,12 +881,11 @@
     const todayWId = getTodaysWorkout();
     const todayW = todayWId ? state.workouts[todayWId] : null;
 
-    const consistency = useMemo(() => {
-      // Weekly-total: compare sessions done per week vs expected per week (last 4 weeks)
+    const dashStats = useMemo(() => {
       var perWeek = state.scheduleType === "weekly"
         ? state.weeklySchedule.filter(s => s.workoutId).length
         : state.cadenceSchedule.rotation.length > 0 ? Math.min(state.cadenceSchedule.rotation.length, 7) : 0;
-      if (perWeek === 0) return 0;
+      // Consistency (4 weeks, weekly totals)
       var totalExp = 0, totalDone = 0;
       for (var wk = 0; wk < 4; wk++) {
         var end = new Date(); end.setDate(end.getDate() - wk * 7);
@@ -894,9 +893,26 @@
         var startStr = toDateStr(start), endStr = toDateStr(end);
         var done = state.history.filter(h => h.date >= startStr && h.date <= endStr).length;
         totalExp += perWeek;
-        totalDone += Math.min(done, perWeek);
+        totalDone += Math.min(done, perWeek || 1);
       }
-      return Math.round(totalDone / totalExp * 100);
+      var consistency = perWeek > 0 && totalExp > 0 ? Math.round(totalDone / totalExp * 100) : 0;
+      // Volume trend (this week vs last week)
+      var now = new Date(); var thisWeekStart = new Date(now); thisWeekStart.setDate(thisWeekStart.getDate() - 6);
+      var lastWeekEnd = new Date(thisWeekStart); lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+      var lastWeekStart = new Date(lastWeekEnd); lastWeekStart.setDate(lastWeekStart.getDate() - 6);
+      var volCalc = function(h) { return h.exercises.reduce(function(a, ex) { return a + ex.sets.filter(function(s){return !s.warmup}).reduce(function(b, s){return b + s.reps * s.weight}, 0); }, 0); };
+      var thisVol = state.history.filter(function(h){return h.date >= toDateStr(thisWeekStart) && h.date <= toDateStr(now)}).reduce(function(a,h){return a+volCalc(h)},0);
+      var lastVol = state.history.filter(function(h){return h.date >= toDateStr(lastWeekStart) && h.date <= toDateStr(lastWeekEnd)}).reduce(function(a,h){return a+volCalc(h)},0);
+      var volDelta = lastVol > 0 ? Math.round((thisVol - lastVol) / lastVol * 100) : 0;
+      // Streak (consecutive weeks hitting perWeek target)
+      var streak = 0;
+      for (var sw = 0; sw < 52; sw++) {
+        var se = new Date(); se.setDate(se.getDate() - sw * 7);
+        var ss = new Date(se); ss.setDate(ss.getDate() - 6);
+        var cnt = state.history.filter(function(h){return h.date >= toDateStr(ss) && h.date <= toDateStr(se)}).length;
+        if (perWeek > 0 && cnt >= perWeek) streak++; else if (sw > 0) break;
+      }
+      return { consistency: consistency, thisVol: thisVol, volDelta: volDelta, streak: streak, perWeek: perWeek };
     }, [state.history,state.weeklySchedule,state.cadenceSchedule,state.scheduleType]);
 
     const startTracking = (wid, isOverride) => {
@@ -922,21 +938,30 @@
       ),
       // Stats
       e("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
-        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, consistency + "%"), e("div", { className: "stat-label" }, "Consistency")),
-        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, state.history.length), e("div", { className: "stat-label" }, "Workouts")),
-        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, latestWeight ? latestWeight.weight : "—"), e("div", { className: "stat-label" }, latestWeight ? state.weightUnit : "Weight")),
+        e("div", { className: "stat-box" },
+          e("div", { className: "stat-num", style: { color: dashStats.consistency >= 85 ? "#4ade80" : dashStats.consistency >= 50 ? "#facc15" : "#ef4444" } }, dashStats.consistency + "%"),
+          e("div", { className: "stat-label" }, dashStats.perWeek > 0 ? dashStats.perWeek + "x/wk goal" : "Consistency"),
+        ),
+        e("div", { className: "stat-box" },
+          e("div", { className: "stat-num" }, dashStats.thisVol >= 1000 ? (dashStats.thisVol/1000).toFixed(1) + "k" : dashStats.thisVol || "—"),
+          e("div", { className: "stat-label" }, dashStats.volDelta !== 0 ? (dashStats.volDelta > 0 ? "\u2191" : "\u2193") + Math.abs(dashStats.volDelta) + "% vs last wk" : "Volume"),
+        ),
+        e("div", { className: "stat-box" },
+          e("div", { className: "stat-num" }, dashStats.streak > 0 ? dashStats.streak : "—"),
+          e("div", { className: "stat-label" }, dashStats.streak === 1 ? "week streak" : "week streak"),
+        ),
       ),
       // Today's workout
       e("div", { className: "card", style: alreadyTracked ? { borderLeft: "3px solid #4ade80" } : {} },
         todayW ? (alreadyTracked ? [
           // ── Completed summary ──
-          e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
-            e("div", null,
-              e("div", { className: "label" }, "Today's Workout"),
+          e("div", { key: "h", style: { marginBottom: 10 } },
+            e("div", { className: "label" }, "Today's Workout"),
+            e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
               e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayW.name),
-            ),
-            e("div", { style: { background: "rgba(22,101,52,0.6)", borderRadius: 6, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 } },
-              e("span", { style: { color: "#4ade80", fontSize: 13, fontWeight: 600 } }, "\u2713 Done"),
+              e("div", { style: { background: "rgba(22,101,52,0.6)", borderRadius: 6, padding: "3px 8px" } },
+                e("span", { style: { color: "#4ade80", fontSize: 12, fontWeight: 600 } }, "\u2713 Done"),
+              ),
             ),
           ),
           e("div", { key: "s", style: { display: "flex", gap: 8, marginBottom: 10 } },
@@ -986,6 +1011,32 @@
             e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => editWorkout(todayEntry) }, "Edit"),
             e("button", { className: "btn btn-dark", onClick: () => startTracking(todayWId) }, "+ New Session"),
           ),
+          // Next workout preview
+          (() => {
+            var nextDay = null, nextW = null;
+            if (state.scheduleType === "weekly") {
+              var todayIdx = DAYS.indexOf(todayDay());
+              for (var di = 1; di <= 7; di++) {
+                var idx = (todayIdx + di) % 7;
+                var slot = state.weeklySchedule.find(s => s.day === DAYS[idx]);
+                if (slot && slot.workoutId && state.workouts[slot.workoutId]) {
+                  nextDay = di === 1 ? "Tomorrow" : DAY_LABELS[DAYS[idx]];
+                  nextW = state.workouts[slot.workoutId].name;
+                  break;
+                }
+              }
+            } else if (state.cadenceSchedule.rotation.length > 0) {
+              var ni = (state.cadenceSchedule.currentIndex) % state.cadenceSchedule.rotation.length;
+              var ns = state.cadenceSchedule.rotation[ni];
+              if (ns && ns.workoutId && state.workouts[ns.workoutId]) {
+                nextDay = "Next"; nextW = state.workouts[ns.workoutId].name;
+              }
+            }
+            return nextW ? e("div", { key: "next", style: { fontSize: 12, color: "#71717a", marginTop: 6, textAlign: "center" } },
+              e("span", null, nextDay + ": "),
+              e("span", { style: { color: "#a1a1aa", fontWeight: 500 } }, nextW),
+            ) : null;
+          })(),
         ] : [
           // ── Not yet tracked ──
           e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 } },
