@@ -74,7 +74,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "1.5.6";
+  const APP_VERSION = "2.0.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -340,6 +340,12 @@
   const todayDay = () => DAYS[new Date().getDay()===0?6:new Date().getDay()-1];
   const toDateStr = (d) => d.toISOString().split("T")[0];
   const effortColor = (v) => v<=3?"#4ade80":v<=6?"#facc15":v<=8?"#fb923c":"#ef4444";
+
+  // ─── Exercise Helpers ────────────────────────────────────────────
+  // Build a reverse lookup: exercise name → category
+  const _exCatMap = {};
+  Object.entries(EXERCISE_LIBRARY).forEach(([cat, exs]) => exs.forEach(ex => { _exCatMap[ex.name] = cat; }));
+  const getExerciseCategory = (name) => _exCatMap[name] || null;
 
   // ─── Local Storage ─────────────────────────────────────────────────
   function saveLocal(state) {
@@ -697,7 +703,7 @@
                   e("path", { fill: "currentColor", d: "M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" }),
                   e("path", { fill: "currentColor", d: "M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" }),
                   e("path", { fill: "currentColor", d: "M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" }),
-                ), " Get Started"]
+                ), " Sign in \u00B7 Start Lifting"]
               ),
               error && e("div", { style: { background: "rgba(127,29,29,0.5)", border: "1px solid #991b1b", borderRadius: 8, padding: 12, marginTop: 12, fontSize: 13, color: "#fca5a5" } }, error),
             ),
@@ -741,7 +747,7 @@
               e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "#525252", marginBottom: 10 } }, "Install as App"),
               e("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
                 e("div", { style: { fontSize: 12, color: "#71717a", lineHeight: 1.5 } },
-                  e("strong", { style: { color: "#a1a1aa" } }, "iPhone: "), "Safari \u2192 Share \u2192 Add to Home Screen"),
+                  e("strong", { style: { color: "#a1a1aa" } }, "iPhone: "), "Tap \u25A1\u2191 Share \u2192 Add to Home Screen"),
                 e("div", { style: { fontSize: 12, color: "#71717a", lineHeight: 1.5 } },
                   e("strong", { style: { color: "#a1a1aa" } }, "Android: "), "Chrome \u2192 \u22EE Menu \u2192 Add to Home screen"),
               ),
@@ -898,7 +904,7 @@
       ),
       // Cadence preview
       state.scheduleType === "cadence" && state.cadenceSchedule.rotation.length > 0 && e("div", { className: "card" },
-        e("div", { className: "label" }, "Split"),
+        e("div", { className: "label" }, "Cycle"),
         e("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
           state.cadenceSchedule.rotation.map((slot, i) => {
             const cur = i === state.cadenceSchedule.currentIndex % state.cadenceSchedule.rotation.length;
@@ -914,11 +920,23 @@
   // SCHEDULE SETUP
   // ═══════════════════════════════════════════════════════════════════
   function ScheduleSetup({ state, dispatch }) {
+    const [saved, setSaved] = useState(false);
     const wl = Object.values(state.workouts);
-    const setSlot = (day, wid) => dispatch({type:"SET_WEEKLY_SCHEDULE",schedule:state.weeklySchedule.map(s=>s.day===day?{...s,workoutId:wid}:s)});
-    const addRot = wid => dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:[...state.cadenceSchedule.rotation,{workoutId:wid}]}});
-    const remRot = i => dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:state.cadenceSchedule.rotation.filter((_,idx)=>idx!==i)}});
-    const moveRot = (i,dir) => {const r=[...state.cadenceSchedule.rotation];const n=i+dir;if(n<0||n>=r.length)return;[r[i],r[n]]=[r[n],r[i]];dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:r}});};
+    const flash = () => { setSaved(true); setTimeout(()=>setSaved(false), 1500); };
+    const setSlot = (day, wid) => { dispatch({type:"SET_WEEKLY_SCHEDULE",schedule:state.weeklySchedule.map(s=>s.day===day?{...s,workoutId:wid}:s)}); flash(); };
+    const addRot = wid => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:[...state.cadenceSchedule.rotation,{workoutId:wid}]}}); flash(); };
+    const remRot = i => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:state.cadenceSchedule.rotation.filter((_,idx)=>idx!==i)}}); flash(); };
+    const moveRot = (i,dir) => {const r=[...state.cadenceSchedule.rotation];const n=i+dir;if(n<0||n>=r.length)return;[r[i],r[n]]=[r[n],r[i]];dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:r}}); flash();};
+    const switchType = t => {
+      if (t === state.scheduleType) return;
+      // Warn if the other mode has data
+      const hasWeekly = state.weeklySchedule.some(s=>s.workoutId);
+      const hasCadence = state.cadenceSchedule.rotation.length > 0;
+      if ((t === "cadence" && hasWeekly) || (t === "weekly" && hasCadence)) {
+        if (!confirm("Switch to " + (t==="weekly"?"Weekly":"Rotating Split") + "? Your " + (t==="weekly"?"split":"weekly") + " setup will be kept if you switch back.")) return;
+      }
+      dispatch({type:"SET_SCHEDULE_TYPE",scheduleType:t});
+    };
 
     if (wl.length === 0) return e("div", { className: "fade-in", style: { padding: 16 } },
       e("h2", { style: { fontSize: 20, fontWeight: 700, marginBottom: 16 } }, "Schedule Setup"),
@@ -929,14 +947,17 @@
     );
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
-      e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Schedule Setup"),
+      e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, "Schedule Setup"),
+        saved && e("span", { style: { fontSize: 11, color: "#4ade80", transition: "opacity 0.3s" } }, "Auto-saved"),
+      ),
       // Toggle
       e("div", { style: { display: "flex", background: "#27272a", borderRadius: 8, padding: 4 } },
-        ["weekly","cadence"].map(t => e("button", { key: t, style: { flex: 1, padding: "8px 0", borderRadius: 6, border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer", background: state.scheduleType===t?"#f97316":"transparent", color: state.scheduleType===t?"#fff":"#a1a1aa" }, onClick: () => dispatch({type:"SET_SCHEDULE_TYPE",scheduleType:t}) }, t === "weekly" ? "Weekly" : "Cadence / Split"))
+        ["weekly","cadence"].map(t => e("button", { key: t, style: { flex: 1, padding: "8px 0", borderRadius: 6, border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer", background: state.scheduleType===t?"#f97316":"transparent", color: state.scheduleType===t?"#fff":"#a1a1aa" }, onClick: () => switchType(t) }, t === "weekly" ? "Weekly" : "Rotating Split"))
       ),
       state.scheduleType === "weekly"
         ? e("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
-          e("p", { className: "text-muted", style: { fontSize: 13 } }, "Assign a workout to each day. Leave empty for rest."),
+          e("p", { className: "text-muted", style: { fontSize: 13 } }, "Assign a workout to each day of the week. Leave empty for rest."),
           state.weeklySchedule.map(slot => e("div", { key: slot.day, style: { display: "flex", alignItems: "center", gap: 12, background: "#27272a", borderRadius: 8, padding: 12 } },
             e("div", { style: { width: 40, fontSize: 14, fontWeight: 500, color: "#d4d4d8" } }, DAY_LABELS[slot.day]),
             e("select", { name: "daySlot", value: slot.workoutId || "", onChange: ev => setSlot(slot.day, ev.target.value || null), style: { flex: 1 } },
@@ -946,23 +967,23 @@
           )),
         )
         : e("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
-          e("p", { className: "text-muted", style: { fontSize: 13 } }, "Build your split cycle."),
+          e("p", { className: "text-muted", style: { fontSize: 13 } }, "Build a repeating cycle of workouts and rest days, regardless of the day of the week."),
           // Rest mode
           e("div", { className: "card" },
-            e("div", { className: "label" }, "Rest Day Mode"),
+            e("div", { className: "label" }, "Rest Days"),
             e("div", { style: { display: "flex", gap: 8 } },
-              ["manual","auto"].map(m => e("button", { key: m, style: { flex: 1, padding: "8px 0", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer", background: state.cadenceSchedule.restMode===m?"#f97316":"#3f3f46", color: state.cadenceSchedule.restMode===m?"#fff":"#a1a1aa" }, onClick: () => dispatch({type:"SET_CADENCE_SCHEDULE",data:{restMode:m}}) }, m==="manual"?"Manual Placement":"Auto Every N Days"))
+              ["manual","auto"].map(m => e("button", { key: m, style: { flex: 1, padding: "8px 0", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer", background: state.cadenceSchedule.restMode===m?"#f97316":"#3f3f46", color: state.cadenceSchedule.restMode===m?"#fff":"#a1a1aa" }, onClick: () => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{restMode:m}}); flash(); } }, m==="manual"?"I'll place them":"Auto every N days"))
             ),
             state.cadenceSchedule.restMode === "auto" && e("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 12 } },
               e("span", { style: { fontSize: 13, color: "#d4d4d8" } }, "Rest every"),
-              e("input", { name: "restEvery", type: "number", min: 1, max: 10, value: state.cadenceSchedule.autoRestEvery, onInput: ev => dispatch({type:"SET_CADENCE_SCHEDULE",data:{autoRestEvery:parseInt(ev.target.value)||3}}), className: "input input-sm" }),
+              e("input", { name: "restEvery", type: "number", min: 1, max: 10, value: state.cadenceSchedule.autoRestEvery, onInput: ev => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{autoRestEvery:parseInt(ev.target.value)||3}}); flash(); }, className: "input input-sm" }),
               e("span", { style: { fontSize: 13, color: "#d4d4d8" } }, "workout days"),
             ),
           ),
           // Rotation
           e("div", { className: "card" },
-            e("div", { className: "label" }, "Split Order"),
-            state.cadenceSchedule.rotation.length === 0 && e("p", { className: "text-muted", style: { fontSize: 13, marginBottom: 12 } }, "No items yet."),
+            e("div", { className: "label" }, "Cycle Order"),
+            state.cadenceSchedule.rotation.length === 0 && e("p", { className: "text-muted", style: { fontSize: 13, marginBottom: 12 } }, "Add workouts to build your cycle."),
             e("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 } },
               state.cadenceSchedule.rotation.map((slot, i) => {
                 const w = slot.workoutId ? state.workouts[slot.workoutId] : null;
@@ -987,16 +1008,20 @@
   // ═══════════════════════════════════════════════════════════════════
   // WORKOUT BUILDER
   // ═══════════════════════════════════════════════════════════════════
+  const ALL_MUSCLE_GROUPS = Object.keys(EXERCISE_LIBRARY);
+
   function WorkoutBuilder({ state, dispatch }) {
     const [editing, setEditing] = useState(null);
     const [name, setName] = useState("");
+    const [targetMuscles, setTargetMuscles] = useState([]);
     const [exercises, setExercises] = useState([]);
     const [showLib, setShowLib] = useState(false);
-    const [libCat, setLibCat] = useState("chest");
+    const [libCat, setLibCat] = useState("");
     const wl = Object.values(state.workouts);
 
-    const startNew = () => { setEditing("new"); setName(""); setExercises([]); };
-    const startEdit = w => { setEditing(w.id); setName(w.name); setExercises(w.exercises.map(x=>({...x}))); };
+    const startNew = () => { setEditing("new"); setName(""); setTargetMuscles([]); setExercises([]); setLibCat(""); };
+    const startEdit = w => { setEditing(w.id); setName(w.name); setTargetMuscles(w.targetMuscles||[]); setExercises(w.exercises.map(x=>({...x}))); setLibCat(""); };
+    const toggleMuscle = cat => setTargetMuscles(prev => prev.includes(cat) ? prev.filter(c=>c!==cat) : [...prev,cat]);
     const addEx = ex => setExercises([...exercises, { id: uid(), name: ex.name, sets: ex.defaultSets, defaultReps: ex.defaultReps, alternatives: [] }]);
     const addCustom = () => setExercises([...exercises, { id: uid(), name: "New Exercise", sets: 3, defaultReps: 10, alternatives: [] }]);
     const updEx = (id, f, v) => setExercises(exercises.map(x => x.id===id ? {...x,[f]:v} : x));
@@ -1004,8 +1029,11 @@
     const moveEx = (i,d) => { const a=[...exercises];const n=i+d;if(n<0||n>=a.length)return;[a[i],a[n]]=[a[n],a[i]];setExercises(a); };
     const addAlt = (id,n) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:[...x.alternatives,n]} : x));
     const remAlt = (id,ai) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:x.alternatives.filter((_,i)=>i!==ai)} : x));
-    const save = () => { if(!name.trim())return; dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),exercises}}); setEditing(null); };
+    const save = () => { if(!name.trim())return; dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),targetMuscles,exercises}}); setEditing(null); };
     const del = id => { dispatch({type:"DELETE_WORKOUT",id}); if(editing===id)setEditing(null); };
+    // Library categories: show target muscles first, then "All" option
+    const libCategories = targetMuscles.length > 0 ? [...targetMuscles, ...ALL_MUSCLE_GROUPS.filter(c=>!targetMuscles.includes(c))] : ALL_MUSCLE_GROUPS;
+    const activeLibCat = libCat || (targetMuscles.length > 0 ? targetMuscles[0] : "chest");
 
     if (editing !== null) {
       return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
@@ -1014,6 +1042,14 @@
           e("button", { style: { background: "none", border: "none", color: "#a1a1aa", cursor: "pointer", fontSize: 13 }, onClick: () => setEditing(null) }, "Cancel"),
         ),
         e("input", { name: "workoutName", type: "text", placeholder: "Workout name", value: name, onInput: ev => setName(ev.target.value), className: "input", style: { padding: 12, fontSize: 16 } }),
+        // Target muscle groups
+        e("div", null,
+          e("div", { className: "label" }, "Target Muscles"),
+          e("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
+            ALL_MUSCLE_GROUPS.map(cat => e("button", { key: cat, style: { padding: "6px 12px", borderRadius: 9999, border: "none", fontSize: 12, cursor: "pointer", textTransform: "capitalize", background: targetMuscles.includes(cat) ? "#f97316" : "#3f3f46", color: targetMuscles.includes(cat) ? "#fff" : "#a1a1aa", fontWeight: targetMuscles.includes(cat) ? 600 : 400 }, onClick: () => toggleMuscle(cat) }, cat))
+          ),
+          targetMuscles.length === 0 && e("p", { style: { fontSize: 11, color: "#52525b", marginTop: 6 } }, "Select muscles to filter the exercise library"),
+        ),
         e("div", { className: "label" }, "Exercises"),
         exercises.map((ex, idx) => e("div", { key: ex.id, className: "card", style: { display: "flex", flexDirection: "column", gap: 12 } },
           e("div", { style: { display: "flex", gap: 8, alignItems: "start" } },
@@ -1036,7 +1072,20 @@
                 ),
                 e("select", { name: "addAlternative", value: "", onChange: ev => { if(ev.target.value){addAlt(ex.id,ev.target.value);ev.target.value="";} }, style: { width: "100%", fontSize: 12 } },
                   e("option", { value: "" }, "Add alternative..."),
-                  Object.entries(EXERCISE_LIBRARY).flatMap(([cat,exs]) => exs.filter(l => l.name!==ex.name && !ex.alternatives.includes(l.name)).map(l => e("option", { key: cat+"-"+l.name, value: l.name }, l.name + " (" + cat + ")")))
+                  // Same-category exercises first (most relevant alternatives)
+                  (function(){
+                    const myCat = getExerciseCategory(ex.name);
+                    const sameCat = myCat ? (EXERCISE_LIBRARY[myCat]||[]).filter(l => l.name!==ex.name && !ex.alternatives.includes(l.name)) : [];
+                    const otherCats = Object.entries(EXERCISE_LIBRARY).filter(([cat])=>cat!==myCat).flatMap(([cat,exs])=>exs.filter(l=>l.name!==ex.name&&!ex.alternatives.includes(l.name)).map(l=>({...l,cat})));
+                    return [
+                      sameCat.length>0 && e("optgroup", { key: "same", label: myCat ? (myCat.charAt(0).toUpperCase()+myCat.slice(1)+" (same muscle)") : "Similar" },
+                        sameCat.map(l => e("option", { key: "same-"+l.name, value: l.name }, l.name))
+                      ),
+                      otherCats.length>0 && e("optgroup", { key: "other", label: "Other muscles" },
+                        otherCats.map(l => e("option", { key: "other-"+l.cat+"-"+l.name, value: l.name }, l.name+" ("+l.cat+")"))
+                      )
+                    ];
+                  })()
                 ),
               ),
             ),
@@ -1047,10 +1096,12 @@
         e("button", { className: "btn btn-ghost", style: { width: "100%", marginTop: 8 }, onClick: addCustom }, "+ Add Custom Exercise"),
         showLib && e("div", { className: "card" },
           e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 } },
-            Object.keys(EXERCISE_LIBRARY).map(cat => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: libCat===cat?"#f97316":"#3f3f46", color: libCat===cat?"#fff":"#a1a1aa" }, onClick: () => setLibCat(cat) }, cat))
+            libCategories.map((cat, i) => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: activeLibCat===cat?"#f97316": targetMuscles.includes(cat)?"#52341a":"#3f3f46", color: activeLibCat===cat?"#fff": targetMuscles.includes(cat)?"#f97316":"#a1a1aa", fontWeight: targetMuscles.includes(cat)?600:400 }, onClick: () => setLibCat(cat) },
+              cat + (i===0 && targetMuscles.length>0 && targetMuscles.includes(cat) ? " ★" : "")
+            ))
           ),
           e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
-            (EXERCISE_LIBRARY[libCat]||[]).map(ex => e("button", { key: ex.name, style: { textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onMouseOver: function(ev){ev.target.style.background="#3f3f46"}, onMouseOut: function(ev){ev.target.style.background="transparent"}, onClick: () => addEx(ex) },
+            (EXERCISE_LIBRARY[activeLibCat]||[]).map(ex => e("button", { key: ex.name, style: { textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onMouseOver: function(ev){ev.target.style.background="#3f3f46"}, onMouseOut: function(ev){ev.target.style.background="transparent"}, onClick: () => addEx(ex) },
               ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"×"+ex.defaultReps),
             ))
           ),
@@ -1066,12 +1117,15 @@
       ),
       wl.length === 0 && e("div", { className: "card", style: { textAlign: "center", padding: 32 } }, e("p", { className: "text-muted" }, "No workouts yet. Create one!")),
       wl.map(w => e("div", { key: w.id, className: "card" },
-        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
           e("div", { style: { fontSize: 18, fontWeight: 600 } }, w.name),
           e("div", { style: { display: "flex", gap: 12 } },
             e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>startEdit(w) }, "Edit"),
             e("button", { style: { background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13 }, onClick: ()=>del(w.id) }, "Delete"),
           ),
+        ),
+        (w.targetMuscles||[]).length > 0 && e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
+          w.targetMuscles.map(m => e("span", { key: m, style: { fontSize: 10, padding: "2px 8px", borderRadius: 9999, background: "rgba(249,115,22,0.15)", color: "#f97316", textTransform: "capitalize" } }, m))
         ),
         w.exercises.map(ex => e("div", { key: ex.id, style: { display: "flex", justifyContent: "space-between", fontSize: 13, color: "#d4d4d8", padding: "2px 0" } },
           e("span", null, ex.name),
@@ -1354,10 +1408,10 @@
         e("div", { style: { fontSize: 12, color: "#a1a1aa", lineHeight: 1.5, marginBottom: 12 } }, "Add Workit to your phone's home screen for a full-screen, app-like experience with no browser bar."),
         e("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
           e("div", null,
-            e("div", { style: { fontSize: 13, fontWeight: 600, color: "#e4e4e7", marginBottom: 4 } }, "iPhone / iPad (Safari)"),
+            e("div", { style: { fontSize: 13, fontWeight: 600, color: "#e4e4e7", marginBottom: 4 } }, "iPhone / iPad"),
             e("div", { style: { fontSize: 11, color: "#71717a", lineHeight: 1.6 } },
-              "1. Open harmant.app/workit in Safari", e("br"),
-              "2. Tap the Share button (square with arrow)", e("br"),
+              "1. Open harmant.app/workit in any browser", e("br"),
+              "2. Tap the Share button \u25A1\u2191 (square with arrow)", e("br"),
               "3. Scroll down and tap \"Add to Home Screen\"", e("br"),
               "4. Tap \"Add\" \u2014 done!"),
           ),
@@ -1403,18 +1457,25 @@
     const syncTimeout = useRef(null);
     const prevState = useRef(null);
 
-    // ── 1. On mount: load from localStorage instantly, then try Google auth
+    // ── 1. On mount: restore session if user was previously signed in
     useEffect(() => {
-      // Always start at login — localStorage is only used to restore data after sign-in
+      const hadSession = localStorage.getItem("workit_session") === "active";
+      const cached = loadLocal();
+      if (hadSession && cached) {
+        const { trackingSession, ...data } = cached;
+        dispatch({type:"LOAD_FROM_SHEETS", data});
+        if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
+        prevState.current = { ...makeInitialState(), ...data };
+      }
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
-          setAuthState("login");
+          setAuthState(hadSession && cached ? "offline" : "login");
         }
       }, 200);
       const fb = setTimeout(() => {
         clearInterval(check);
-        setAuthState("login");
+        setAuthState(hadSession && cached ? "offline" : "login");
       }, 3000);
       return () => { clearInterval(check); clearTimeout(fb); };
     }, []);
@@ -1465,6 +1526,7 @@
           prevState.current={...makeInitialState(),...remoteData};
         }
         setAuthState("ready"); setSyncStatus("synced");
+        try{localStorage.setItem("workit_session","active")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, []);
 
@@ -1479,6 +1541,7 @@
       if(sheetsService.accessToken)try{google.accounts.oauth2.revoke(sheetsService.accessToken)}catch(ex){}
       sheetsService.accessToken=null;sheetsService.spreadsheetId=null;
       // Don't clear local data — keep it available for next sign-in
+      try{localStorage.removeItem("workit_session")}catch(e){}
       setAuthState("login"); setSyncStatus("");
     }, []);
 
