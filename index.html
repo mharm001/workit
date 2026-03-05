@@ -74,7 +74,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "1.5.0";
+  const APP_VERSION = "1.5.1";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -639,6 +639,7 @@
   function LoginScreen({ onLogin }) {
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [showInfo, setShowInfo] = useState(false);
     const handleLogin = () => {
       setLoading(true); setError(null);
       try {
@@ -700,15 +701,16 @@
               ),
               error && e("div", { style: { background: "rgba(127,29,29,0.5)", border: "1px solid #991b1b", borderRadius: 8, padding: 12, marginTop: 12, fontSize: 13, color: "#fca5a5" } }, error),
             ),
-            // Privacy footer inside card
-            e("div", { style: { padding: "16px 28px", background: "#111", borderTop: "1px solid #1f1f1f" } },
-              e("p", { style: { fontSize: 11, color: "#3a3a3a", textAlign: "center", lineHeight: 1.5, margin: 0 } },
-                "Uses ", e("code", { style: { color: "#f97316", fontFamily: "monospace", fontSize: 10 } }, "drive.file"),
-                " scope — your data lives in a private Google Sheet only this app can access."),
+          ),
+          // ── Collapsible "Learn more" ──
+          e("div", { style: { marginTop: 24, textAlign: "center" } },
+            e("button", { onClick: function() { setShowInfo(!showInfo); }, style: { background: "none", border: "none", color: "#525252", fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 0", transition: "color 0.2s" },
+              onMouseOver: function(ev){ev.currentTarget.style.color="#a1a1aa"}, onMouseOut: function(ev){ev.currentTarget.style.color="#525252"} },
+              showInfo ? "Hide details" : "How it works, privacy & install",
+              e("span", { style: { fontSize: 10, transition: "transform 0.2s", display: "inline-block", transform: showInfo ? "rotate(180deg)" : "rotate(0deg)" } }, "\u25BC"),
             ),
           ),
-          // ── Info sections below card ──
-          e("div", { style: { marginTop: 32, display: "flex", flexDirection: "column", gap: 20 } },
+          showInfo && e("div", { style: { marginTop: 8, display: "flex", flexDirection: "column", gap: 20, animation: "fadeIn 0.2s ease" } },
             // What is Workit
             e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 20 } },
               e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "#525252", marginBottom: 10 } }, "What is Workit?"),
@@ -720,7 +722,7 @@
               e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "#525252", marginBottom: 12 } }, "Privacy & Trust"),
               e("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
                 [
-                  ["\uD83D\uDD12", "Minimal access", "Only touches the single spreadsheet it creates. Cannot see any other files in your Drive."],
+                  ["\uD83D\uDD12", "Minimal access", "Uses drive.file scope \u2014 only touches the single spreadsheet it creates. Cannot see any other files in your Drive."],
                   ["\uD83D\uDEAB", "No server", "Static site on GitHub Pages. No backend, no analytics, no cookies, no data collected."],
                   ["\uD83D\uDCC4", "You own it", "Your data lives in a standard Google Sheet. View, edit, or delete it anytime."],
                 ].map(function(item) {
@@ -744,11 +746,11 @@
                   e("strong", { style: { color: "#a1a1aa" } }, "Android: "), "Chrome \u2192 \u22EE Menu \u2192 Add to Home screen"),
               ),
             ),
-            // Version footer
-            e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" } },
-              e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "harmant.app/workit"),
-              e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "v" + APP_VERSION),
-            ),
+          ),
+          // Version footer
+          e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 16, marginTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center" } },
+            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "harmant.app/workit"),
+            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "v" + APP_VERSION),
           ),
         ),
       )
