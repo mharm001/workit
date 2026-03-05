@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.8.0";
+  const APP_VERSION = "2.9.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -389,7 +389,7 @@
       await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values:batchUpdate", { method:"POST", body: JSON.stringify({ valueInputOption:"RAW", data:[
         {range:"config!A1:B1",values:[["key","value"]]},
         {range:"history!A1:H1",values:[["Date","Workout","Exercise","Set #","Reps","Weight","RIR","Warmup"]]},
-        {range:"weight!A1:B1",values:[["Date","Weight (lbs)"]]}
+        {range:"weight!A1:C1",values:[["Date","Weight (lbs)","Body Fat %"]]}
       ]})});
       return this.spreadsheetId;
     },
@@ -441,7 +441,7 @@
     async loadAll() {
       // Try reading all tabs, including legacy "workouts" tab for backward compat
       const [configRows, historyRows, weightRows] = await Promise.all([
-        this._getValues("config!A2:B200"), this._getValues("history!A2:G50000"), this._getValues("weight!A2:B1000")
+        this._getValues("config!A2:B200"), this._getValues("history!A2:G50000"), this._getValues("weight!A2:C1000")
       ]);
       // Also try legacy workouts tab (old format had separate workouts sheet)
       let legacyWorkoutRows = [];
@@ -472,7 +472,7 @@
           Object.entries(workouts).forEach(function(e) { if (e[1].name === h.workoutName) h.workoutId = e[0]; });
         }
       });
-      const weightLog = weightRows.map(function(r){ return {date:r[0],weight:parseFloat(r[1])} }).filter(function(w){return !isNaN(w.weight)});
+      const weightLog = weightRows.map(function(r){ var bf=r[2]?parseFloat(r[2]):null; return {date:r[0],weight:parseFloat(r[1]),bodyFat:(!isNaN(bf)&&bf>0)?bf:null} }).filter(function(w){return !isNaN(w.weight)});
       return {
         scheduleType: config.scheduleType || "weekly",
         weeklySchedule: config.weeklySchedule || DAYS.map(function(d){return{day:d,workoutId:null}}),
@@ -487,7 +487,7 @@
       await Promise.all([
         this._clearAndWrite("config!A1:B200", [["key","value"]]),
         this._clearAndWrite("history!A1:H50000", [["Date","Workout","Exercise","Set #","Reps","Weight","RIR","Warmup"]]),
-        this._clearAndWrite("weight!A1:B1000", [["Date","Weight (lbs)"]]),
+        this._clearAndWrite("weight!A1:C1000", [["Date","Weight (lbs)","Body Fat %"]]),
       ]);
     },
 
@@ -501,11 +501,11 @@
       ];
       const historyVals = this._flattenHistory(state.history);
       const unit = state.weightUnit||"lbs";
-      const weightVals = [["Date","Weight ("+unit+")"]].concat(state.weightLog.map(function(w){return[w.date,String(w.weight)]}));
+      const weightVals = [["Date","Weight ("+unit+")","Body Fat %"]].concat(state.weightLog.map(function(w){return[w.date,String(w.weight),w.bodyFat!=null?String(w.bodyFat):""]}));
       await Promise.all([
         this._clearAndWrite("config!A1:B200", configVals),
         this._clearAndWrite("history!A1:H50000", historyVals),
-        this._clearAndWrite("weight!A1:B1000", weightVals),
+        this._clearAndWrite("weight!A1:C1000", weightVals),
       ]);
     },
   };
@@ -562,7 +562,11 @@
         }
         return state;
       }
-      case "LOG_WEIGHT": return { ...state, weightLog: [...state.weightLog.filter(w => w.date !== action.date), { date: action.date, weight: action.weight }].sort((a,b)=>a.date.localeCompare(b.date)) };
+      case "LOG_WEIGHT": {
+        const existing = state.weightLog.find(w => w.date === action.date);
+        const entry = { date: action.date, weight: action.weight != null ? action.weight : (existing ? existing.weight : null), bodyFat: action.bodyFat != null ? action.bodyFat : (existing ? existing.bodyFat : null) };
+        return { ...state, weightLog: [...state.weightLog.filter(w => w.date !== entry.date), entry].filter(w => w.weight != null).sort((a,b)=>a.date.localeCompare(b.date)) };
+      }
       case "SET_WEIGHT_UNIT": return { ...state, weightUnit: action.unit };
       case "LOAD_FROM_SHEETS": return { ...state, ...action.data };
       case "IMPORT_STATE": return { ...action.state, activeView: "dashboard", trackingSession: null };
@@ -641,6 +645,56 @@
           );
         }),
         label && e("text", { x: w / 2, y: 12, textAnchor: "middle", fill: "#a1a1aa", fontSize: 10 }, label),
+      )
+    );
+  }
+
+  function BodyCompChart({ weightData, bfData, weightUnit, width, height }) {
+    const w = width || 340; const h = height || 170; const pad = 40; const rPad = 40;
+    const hasW = weightData.length >= 2; const hasBf = bfData.length >= 2;
+    if (!hasW && !hasBf) return e("p", { style: { color: "#71717a", fontSize: 12, textAlign: "center", padding: "24px 0" } }, "Not enough data yet");
+    // Merge all dates for x-axis
+    const allDates = [...new Set([...weightData.map(d=>d.date),...bfData.map(d=>d.date)])].sort();
+    const toX = i => pad + (i / (allDates.length - 1)) * (w - pad - rPad);
+    // Weight line (left axis, orange)
+    var wPts = [], wMin = 0, wMax = 0, wRange = 1;
+    if (hasW) {
+      const wVals = weightData.map(d=>d.weight); wMin = Math.min(...wVals); wMax = Math.max(...wVals); wRange = wMax - wMin || 1;
+      wPts = weightData.map(d => { const xi = allDates.indexOf(d.date); return { x: toX(xi), y: h - pad - ((d.weight - wMin) / wRange) * (h - pad * 2), val: d.weight }; });
+    }
+    // BF line (right axis, cyan)
+    var bPts = [], bMin = 0, bMax = 0, bRange = 1;
+    if (hasBf) {
+      const bVals = bfData.map(d=>d.bf); bMin = Math.min(...bVals); bMax = Math.max(...bVals); bRange = bMax - bMin || 1;
+      bPts = bfData.map(d => { const xi = allDates.indexOf(d.date); return { x: toX(xi), y: h - pad - ((d.bf - bMin) / bRange) * (h - pad * 2), val: d.bf }; });
+    }
+    const makePath = pts => pts.map((p,i) => (i===0?"M":"L")+p.x+","+p.y).join(" ");
+    // X labels
+    const xIdxs = allDates.length <= 10 ? allDates.map((_,i)=>i) : [0, Math.floor(allDates.length/2), allDates.length-1];
+    return e("div", { style: { overflowX: "auto" } },
+      e("svg", { width: w, height: h, viewBox: "0 0 " + w + " " + h, style: { display: "block", margin: "0 auto" } },
+        // Grid lines
+        [0, 0.5, 1].map((f, i) => {
+          const y = h - pad - f * (h - pad * 2);
+          return e("g", { key: "g"+i },
+            e("line", { x1: pad, y1: y, x2: w - rPad, y2: y, stroke: "#3f3f46", strokeDasharray: "3,3" }),
+            hasW && e("text", { x: pad - 4, y: y + 4, textAnchor: "end", fill: "#f97316", fontSize: 9 }, (wMin + f * wRange).toFixed(0)),
+            hasBf && e("text", { x: w - rPad + 4, y: y + 4, textAnchor: "start", fill: "#22d3ee", fontSize: 9 }, (bMin + f * bRange).toFixed(1) + "%"),
+          );
+        }),
+        // X labels
+        xIdxs.map(i => e("text", { key: "x"+i, x: toX(i), y: h - pad + 14, textAnchor: "middle", fill: "#71717a", fontSize: 9 }, allDates[i])),
+        // Weight line + dots
+        hasW && e("path", { d: makePath(wPts), fill: "none", stroke: "#f97316", strokeWidth: 2 }),
+        hasW && wPts.map((p,i) => e("circle", { key: "w"+i, cx: p.x, cy: p.y, r: 3, fill: "#f97316" })),
+        // BF line + dots
+        hasBf && e("path", { d: makePath(bPts), fill: "none", stroke: "#22d3ee", strokeWidth: 2 }),
+        hasBf && bPts.map((p,i) => e("circle", { key: "b"+i, cx: p.x, cy: p.y, r: 3, fill: "#22d3ee" })),
+        // Legend
+        e("circle", { cx: pad + 10, cy: 10, r: 4, fill: "#f97316" }),
+        e("text", { x: pad + 18, y: 13, fill: "#a1a1aa", fontSize: 9 }, "Weight (" + weightUnit + ")"),
+        e("circle", { cx: pad + 100, cy: 10, r: 4, fill: "#22d3ee" }),
+        e("text", { x: pad + 108, y: 13, fill: "#a1a1aa", fontSize: 9 }, "Body Fat %"),
       )
     );
   }
@@ -810,6 +864,7 @@
   // ═══════════════════════════════════════════════════════════════════
   function Dashboard({ state, dispatch }) {
     const [weightInput, setWeightInput] = useState("");
+    const [bfInput, setBfInput] = useState("");
     const [showOverride, setShowOverride] = useState(false);
     const workoutList = Object.values(state.workouts);
     const todayStr = toDateStr(new Date());
@@ -846,7 +901,11 @@
     const editWorkout = (entry) => {
       dispatch({type:"EDIT_WORKOUT", editingDate: entry.date, session:{workoutId:entry.workoutId,wasOverride:entry.wasOverride||false,exercises:entry.exercises}});
     };
-    const logWeight = () => { const w=parseFloat(weightInput); if(!isNaN(w)&&w>0){dispatch({type:"LOG_WEIGHT",date:todayStr,weight:w});setWeightInput("");} };
+    const logWeight = () => {
+      const w=parseFloat(weightInput); const bf=parseFloat(bfInput);
+      const hasW=!isNaN(w)&&w>0; const hasBf=!isNaN(bf)&&bf>0&&bf<100;
+      if(hasW||hasBf){dispatch({type:"LOG_WEIGHT",date:todayStr,weight:hasW?w:null,bodyFat:hasBf?bf:null});setWeightInput("");setBfInput("");}
+    };
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
       // Header
@@ -898,19 +957,22 @@
             ]
         ),
       ),
-      // Weight log
+      // Body metrics
       e("div", { className: "card" },
-        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-          e("div", { className: "label", style: { margin: 0 } }, "Log Body Weight"),
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+          e("div", { className: "label", style: { margin: 0 } }, "Body Metrics"),
           e("div", { style: { display: "flex", background: "#27272a", borderRadius: 6, padding: 2 } },
             ["lbs","kg"].map(u => e("button", { key: u, style: { padding: "3px 10px", borderRadius: 4, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer", background: state.weightUnit===u?"#f97316":"transparent", color: state.weightUnit===u?"#fff":"#71717a" }, onClick: () => dispatch({type:"SET_WEIGHT_UNIT",unit:u}) }, u))
           ),
         ),
-        e("div", { style: { display: "flex", gap: 8, marginTop: 8 } },
-          e("input", { name: "bodyWeight", type: "number", step: "0.1", placeholder: state.weightUnit, value: weightInput, onInput: ev => setWeightInput(ev.target.value), className: "input", style: { flex: 1 } }),
+        e("div", { style: { display: "flex", gap: 8 } },
+          e("input", { name: "bodyWeight", type: "number", step: "0.1", placeholder: "Weight (" + state.weightUnit + ")", value: weightInput, onInput: ev => setWeightInput(ev.target.value), className: "input", style: { flex: 1 } }),
+          e("input", { name: "bodyFat", type: "number", step: "0.1", placeholder: "Body Fat %", value: bfInput, onInput: ev => setBfInput(ev.target.value), className: "input", style: { width: 90 } }),
           e("button", { className: "btn btn-accent", onClick: logWeight }, "Log"),
         ),
-        state.weightLog.some(w => w.date === todayStr) && e("div", { style: { fontSize: 12, color: "#4ade80", marginTop: 8 } }, "Logged today: " + (state.weightLog.find(w => w.date === todayStr)||{}).weight + " " + state.weightUnit),
+        state.weightLog.some(w => w.date === todayStr) && e("div", { style: { fontSize: 12, color: "#4ade80", marginTop: 8 } },
+          (() => { const t = state.weightLog.find(w => w.date === todayStr); return "Today: " + (t.weight||"—") + " " + state.weightUnit + (t.bodyFat != null ? " · " + t.bodyFat + "% bf" : ""); })()
+        ),
       ),
       // Last workout
       lastWorkout && e("div", { className: "card" },
@@ -1275,7 +1337,8 @@
       }).filter(Boolean);
     },[selW,state.history]);
 
-    const weightData = state.weightLog.map(w => ({ date: w.date.slice(5), weight: w.weight }));
+    const weightData = state.weightLog.filter(w => w.weight).map(w => ({ date: w.date.slice(5), weight: w.weight }));
+    const bfData = state.weightLog.filter(w => w.bodyFat != null).map(w => ({ date: w.date.slice(5), bf: w.bodyFat }));
 
     const prData = useMemo(()=>{
       var r={};
@@ -1304,10 +1367,10 @@
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
       e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Analytics"),
-      // Body weight
-      weightData.length > 1 && e("div", { className: "card" },
-        e("div", { className: "label" }, "Body Weight (" + state.weightUnit + ")"),
-        e(MiniLineChart, { data: weightData, dataKey: "weight", color: "#f97316", width: 340, height: 160 }),
+      // Body composition
+      (weightData.length > 1 || bfData.length > 1) && e("div", { className: "card" },
+        e("div", { className: "label" }, "Body Composition"),
+        e(BodyCompChart, { weightData: weightData, bfData: bfData, weightUnit: state.weightUnit, width: 340, height: 170 }),
       ),
       // Volume
       e("div", { className: "card" },
