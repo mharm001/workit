@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.4.3";
+  const APP_VERSION = "2.5.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1274,12 +1274,24 @@
 
     const weightData = state.weightLog.map(w => ({ date: w.date.slice(5), weight: w.weight }));
 
-    const prs = useMemo(()=>{
-      const r={};state.history.forEach(h=>h.exercises.forEach(x=>x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3)).forEach(s=>{
-        const e1rm=calcE1RM(s.weight,s.reps);
-        if(!r[x.name]||e1rm>r[x.name].e1rm)r[x.name]={weight:s.weight,reps:s.reps,date:h.date,e1rm:e1rm};
+    const prData = useMemo(()=>{
+      var r={};
+      var sorted=state.history.slice().sort((a,b)=>a.date.localeCompare(b.date));
+      sorted.forEach(h=>h.exercises.forEach(x=>x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3)).forEach(s=>{
+        var e1rm=calcE1RM(s.weight,s.reps); if(!e1rm)return;
+        if(!r[x.name])r[x.name]={weight:s.weight,reps:s.reps,date:h.date,e1rm:e1rm,prevE1rm:0};
+        else if(e1rm>r[x.name].e1rm){r[x.name]={prevE1rm:r[x.name].e1rm,weight:s.weight,reps:s.reps,date:h.date,e1rm:e1rm};}
       })));
-      return Object.entries(r).filter(([,v])=>v.e1rm>0).sort((a,b)=>b[1].e1rm-a[1].e1rm);
+      var now=new Date();var cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-14);var cutStr=cutoff.toISOString().slice(0,10);
+      var all=Object.entries(r).filter(([,v])=>v.e1rm>0).map(([name,pr])=>({
+        name:name,cat:getExerciseCategory(name)||"Other",e1rm:pr.e1rm,weight:pr.weight,reps:pr.reps,date:pr.date,
+        delta:pr.prevE1rm>0?pr.e1rm-pr.prevE1rm:0,isRecent:pr.date>=cutStr
+      }));
+      var recent=all.filter(p=>p.isRecent).sort((a,b)=>b.e1rm-a.e1rm);
+      var grouped={};all.forEach(p=>{if(!grouped[p.cat])grouped[p.cat]=[];grouped[p.cat].push(p);});
+      Object.values(grouped).forEach(g=>g.sort((a,b)=>b.e1rm-a.e1rm));
+      var groupOrder=Object.keys(grouped).sort((a,b)=>(grouped[b][0]||{}).e1rm-(grouped[a][0]||{}).e1rm);
+      return{recent:recent,grouped:grouped,groupOrder:groupOrder,total:all.length};
     },[state.history]);
 
     if (state.history.length === 0) return e("div", { style: { padding: 16 } },
@@ -1369,15 +1381,42 @@
         ) :
           e("p", { style: { color: "#52525b", fontSize: 13, textAlign: "center", padding: "24px 0" } }, "Select an exercise to see trends"),
       ),
-      // PRs
-      prs.length > 0 && e("div", { className: "card" },
-        e("div", { className: "label" }, "Personal Records (by Strength Score)"),
-        prs.slice(0, 10).map(([name, pr]) => e("div", { key: name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(63,63,70,0.5)", borderRadius: 8, padding: "8px 12px", marginBottom: 6 } },
-          e("span", { style: { fontSize: 13, color: "#e4e4e7" } }, name),
-          e("div", { style: { textAlign: "right" } },
-            e("div", { style: { fontSize: 14, fontWeight: 700, color: "#22d3ee" } }, pr.e1rm + " " + state.weightUnit),
-            e("div", { style: { fontSize: 11, color: "#71717a" } }, pr.weight + " × " + pr.reps + " · " + pr.date),
+      // Recent PRs (last 14 days)
+      prData.recent.length > 0 && e("div", { className: "card" },
+        e("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
+          e("span", { style: { fontSize: 16 } }, "\uD83D\uDD25"),
+          e("div", { className: "label", style: { margin: 0 } }, "Recent PRs"),
+          e("span", { style: { fontSize: 11, color: "#52525b" } }, "Last 14 days"),
+        ),
+        prData.recent.map(pr => e("div", { key: pr.name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "linear-gradient(135deg, rgba(34,211,238,0.1), rgba(249,115,22,0.1))", borderRadius: 8, padding: "8px 12px", marginBottom: 6, border: "1px solid rgba(34,211,238,0.2)" } },
+          e("div", null,
+            e("div", { style: { fontSize: 13, fontWeight: 600, color: "#e4e4e7" } }, pr.name),
+            e("div", { style: { fontSize: 11, color: "#71717a" } }, pr.cat),
           ),
+          e("div", { style: { textAlign: "right" } },
+            e("div", { style: { display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" } },
+              e("span", { style: { fontSize: 15, fontWeight: 700, color: "#22d3ee" } }, pr.e1rm + " " + state.weightUnit),
+              pr.delta > 0 && e("span", { style: { fontSize: 11, fontWeight: 600, color: "#22c55e" } }, "+" + pr.delta),
+            ),
+            e("div", { style: { fontSize: 11, color: "#71717a" } }, pr.weight + " \u00D7 " + pr.reps + " \u00B7 " + pr.date),
+          ),
+        )),
+      ),
+      // PRs grouped by muscle
+      prData.total > 0 && e("div", { className: "card" },
+        e("div", { className: "label", style: { marginBottom: 12 } }, "Personal Records by Muscle Group"),
+        prData.groupOrder.map(cat => e("div", { key: cat, style: { marginBottom: 16 } },
+          e("div", { style: { fontSize: 12, fontWeight: 600, color: "#f97316", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 } }, cat),
+          prData.grouped[cat].map(pr => e("div", { key: pr.name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(63,63,70,0.5)", borderRadius: 8, padding: "8px 12px", marginBottom: 4 } },
+            e("span", { style: { fontSize: 13, color: "#e4e4e7" } }, pr.name),
+            e("div", { style: { textAlign: "right", display: "flex", alignItems: "center", gap: 8 } },
+              pr.delta > 0 && e("span", { style: { fontSize: 11, fontWeight: 600, color: "#22c55e" } }, "+" + pr.delta),
+              e("div", null,
+                e("div", { style: { fontSize: 14, fontWeight: 700, color: "#22d3ee" } }, pr.e1rm + " " + state.weightUnit),
+                e("div", { style: { fontSize: 10, color: "#52525b" } }, pr.weight + " \u00D7 " + pr.reps),
+              ),
+            ),
+          )),
         )),
       ),
     );
