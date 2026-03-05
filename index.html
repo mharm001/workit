@@ -882,14 +882,21 @@
     const todayW = todayWId ? state.workouts[todayWId] : null;
 
     const consistency = useMemo(() => {
-      var scheduled=0,completed=0,d=new Date();
-      for(var i=0;i<28;i++){
-        var ds=toDateStr(d),day=DAYS[d.getDay()===0?6:d.getDay()-1];
-        var hasScheduled=state.scheduleType==="weekly"?state.weeklySchedule.some(s=>s.day===day&&s.workoutId):state.cadenceSchedule.rotation.length>0;
-        if(hasScheduled){scheduled++;if(state.history.some(h=>h.date===ds))completed++;}
-        d.setDate(d.getDate()-1);
+      // Weekly-total: compare sessions done per week vs expected per week (last 4 weeks)
+      var perWeek = state.scheduleType === "weekly"
+        ? state.weeklySchedule.filter(s => s.workoutId).length
+        : state.cadenceSchedule.rotation.length > 0 ? Math.min(state.cadenceSchedule.rotation.length, 7) : 0;
+      if (perWeek === 0) return 0;
+      var totalExp = 0, totalDone = 0;
+      for (var wk = 0; wk < 4; wk++) {
+        var end = new Date(); end.setDate(end.getDate() - wk * 7);
+        var start = new Date(end); start.setDate(start.getDate() - 6);
+        var startStr = toDateStr(start), endStr = toDateStr(end);
+        var done = state.history.filter(h => h.date >= startStr && h.date <= endStr).length;
+        totalExp += perWeek;
+        totalDone += Math.min(done, perWeek);
       }
-      return scheduled>0?Math.round(completed/scheduled*100):0;
+      return Math.round(totalDone / totalExp * 100);
     }, [state.history,state.weeklySchedule,state.cadenceSchedule,state.scheduleType]);
 
     const startTracking = (wid, isOverride) => {
@@ -967,9 +974,10 @@
                   e("div", { style: { fontSize: 16, fontWeight: 700, color: "#f97316" } }, totalVol >= 1000 ? (totalVol/1000).toFixed(1) + "k" : totalVol),
                   e("div", { style: { fontSize: 10, color: "#71717a" } }, "volume"),
                 ),
-                improved && e("div", { key: "best", style: { flex: 2, background: improved.delta > 0 ? "rgba(22,163,74,0.15)" : "#27272a", border: improved.delta > 0 ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
+                improved && e("div", { key: "best", style: { flex: 2, background: improved.delta > 0 ? "rgba(22,163,74,0.15)" : "#27272a", border: improved.delta > 0 ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", borderRadius: 8, padding: "6px 10px", textAlign: "center" } },
+                  e("div", { style: { fontSize: 9, color: "#71717a", textTransform: "uppercase", letterSpacing: 0.5 } }, improved.delta > 0 ? "Most Improved" : "Top Lift"),
                   e("div", { style: { fontSize: 13, fontWeight: 700, color: improved.delta > 0 ? "#4ade80" : "#22d3ee" } }, improved.name.split(" ").slice(0,2).join(" ")),
-                  e("div", { style: { fontSize: 10, color: "#a1a1aa" } }, improved.weight + state.weightUnit + "\u00d7" + improved.reps + (improved.delta > 0 ? " \u2191" + improved.delta + " SS" : " " + improved.score + " SS")),
+                  e("div", { style: { fontSize: 10, color: "#a1a1aa" } }, improved.weight + state.weightUnit + "\u00d7" + improved.reps + (improved.delta > 0 ? " \u2191" + improved.delta : " \u00b7 " + improved.score + " e1RM")),
                 ),
               ];
             })()
