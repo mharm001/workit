@@ -1490,8 +1490,8 @@
     const handleSignOut = useCallback(() => {
       if(sheetsService.accessToken)try{google.accounts.oauth2.revoke(sheetsService.accessToken)}catch(ex){}
       sheetsService.accessToken=null;sheetsService.spreadsheetId=null;setUser(null);
-      // Don't clear local data — keep it available offline
-      setAuthState("offline"); setSyncStatus("offline");
+      // Don't clear local data — keep it available for next sign-in
+      setAuthState("login"); setSyncStatus("");
     }, []);
 
     // ── 8. Reconnect handler (user-initiated, won't be blocked)
