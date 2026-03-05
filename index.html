@@ -69,7 +69,8 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "1.2.0";
+  const APP_VERSION = "1.3.0";
+  const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
   const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
@@ -334,6 +335,30 @@
   const todayDay = () => DAYS[new Date().getDay()===0?6:new Date().getDay()-1];
   const toDateStr = (d) => d.toISOString().split("T")[0];
   const effortColor = (v) => v<=3?"#4ade80":v<=6?"#facc15":v<=8?"#fb923c":"#ef4444";
+
+  // ─── Local Storage ─────────────────────────────────────────────────
+  function saveLocal(state) {
+    try {
+      const { activeView, trackingSession, ...data } = state;
+      // Also save trackingSession so mid-workout progress is preserved
+      const toSave = { ...data };
+      if (trackingSession) toSave._trackingSession = trackingSession;
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(toSave));
+    } catch(e) {}
+  }
+  function loadLocal() {
+    try {
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      const session = data._trackingSession || null;
+      delete data._trackingSession;
+      return { ...data, trackingSession: session };
+    } catch(e) { return null; }
+  }
+  function clearLocal() {
+    try { localStorage.removeItem(LOCAL_STORAGE_KEY); } catch(e) {}
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // SHEETS SERVICE
@@ -657,16 +682,22 @@
   // ═══════════════════════════════════════════════════════════════════
   // NAV
   // ═══════════════════════════════════════════════════════════════════
-  function NavBar({ activeView, dispatch, user, onSignOut, syncing }) {
+  function NavBar({ activeView, dispatch, user, onSignOut, syncing, syncStatus, onReconnect }) {
     const tabs = [{id:"dashboard",label:"Home",icon:"🏠"},{id:"schedule",label:"Schedule",icon:"📅"},{id:"workouts",label:"Workouts",icon:"💪"},{id:"analytics",label:"Stats",icon:"📊"},{id:"settings",label:"Data",icon:"⚙️"}];
+    const statusDot = syncStatus === "synced" ? "#4ade80" : syncStatus === "offline" ? "#facc15" : syncStatus === "error" ? "#ef4444" : "#71717a";
+    const statusText = syncStatus === "synced" ? "Synced" : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync error" : "";
     return e("div", { style: { position: "sticky", top: 0, zIndex: 50 } },
       e("div", { className: "user-bar" },
         e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
           user && user.picture && e("img", { src: user.picture, alt: "" }),
-          e("span", { style: { fontSize: 12, color: "#a1a1aa" } }, (user && (user.name || user.email)) || ""),
+          e("span", { style: { fontSize: 12, color: "#a1a1aa" } }, (user && (user.name || user.email)) || "Offline"),
           syncing && e("div", { className: "spinner", style: { width: 12, height: 12, borderWidth: 2 } }),
+          !syncing && statusText && e("span", { style: { fontSize: 10, color: statusDot, display: "flex", alignItems: "center", gap: 3 } },
+            e("span", { style: { width: 6, height: 6, borderRadius: "50%", background: statusDot, display: "inline-block" } }), statusText),
         ),
-        e("button", { onClick: onSignOut, style: { background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer" } }, "Sign out"),
+        user
+          ? e("button", { onClick: onSignOut, style: { background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer" } }, "Sign out")
+          : e("button", { onClick: onReconnect, style: { background: "none", border: "none", color: "#f97316", fontSize: 12, cursor: "pointer" } }, "Sign in"),
       ),
       e("div", { className: "tab-bar" },
         tabs.map(t => e("button", { key: t.id, className: "tab" + (activeView === t.id ? " active" : ""), onClick: () => dispatch({type:"SET_VIEW",view:t.id}) },
@@ -1204,27 +1235,63 @@
   // MAIN APP
   // ═══════════════════════════════════════════════════════════════════
   function App() {
+    // authState: "loading" | "login" | "ready" | "offline"
+    // "offline" = has local data but no valid token, app is fully usable
     const [authState, setAuthState] = useState("loading");
     const [user, setUser] = useState(null);
     const [state, dispatch] = useReducer(reducer, null, makeInitialState);
     const [syncing, setSyncing] = useState(false);
+    const [syncStatus, setSyncStatus] = useState(""); // "" | "synced" | "offline" | "error"
     const [loadMsg, setLoadMsg] = useState("Loading...");
     const syncTimeout = useRef(null);
     const prevState = useRef(null);
+    const tokenClient = useRef(null);
+    const tokenRefreshTimer = useRef(null);
 
+    // ── 1. On mount: load from localStorage instantly, then try Google auth
     useEffect(() => {
-      const check = setInterval(() => { if(typeof google!=="undefined"&&google.accounts){clearInterval(check);setAuthState("login");} }, 200);
-      const fb = setTimeout(() => {clearInterval(check);setAuthState("login");}, 5000);
+      const cached = loadLocal();
+      if (cached) {
+        const { trackingSession, ...data } = cached;
+        dispatch({type:"LOAD_FROM_SHEETS", data});
+        if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
+        prevState.current = { ...makeInitialState(), ...data };
+      }
+      // Wait for Google Identity Services to load
+      const check = setInterval(() => {
+        if(typeof google!=="undefined"&&google.accounts){
+          clearInterval(check);
+          // If we have cached data, go straight to usable state
+          if (cached) { setAuthState("offline"); tryAutoReauth(); }
+          else setAuthState("login");
+        }
+      }, 200);
+      const fb = setTimeout(() => {
+        clearInterval(check);
+        if (cached) setAuthState("offline");
+        else setAuthState("login");
+      }, 5000);
       return () => { clearInterval(check); clearTimeout(fb); };
     }, []);
 
+    // ── 2. Save to localStorage on every state change
+    useEffect(() => {
+      if (authState === "loading") return;
+      saveLocal(state);
+    }, [state, authState]);
+
+    // ── 3. Sync to Sheets (background, non-blocking)
     const syncToSheets = useCallback(async (st) => {
-      if(!sheetsService.accessToken||!sheetsService.spreadsheetId)return;
-      setSyncing(true); try{await sheetsService.saveAll(st);}catch(ex){console.warn("Sync:",ex);}finally{setSyncing(false);}
+      if(!sheetsService.accessToken||!sheetsService.spreadsheetId) { setSyncStatus("offline"); return; }
+      setSyncing(true); setSyncStatus("");
+      try{ await sheetsService.saveAll(st); setSyncStatus("synced"); }
+      catch(ex){ console.warn("Sync:",ex); setSyncStatus("error"); }
+      finally{ setSyncing(false); }
     }, []);
 
+    // ── 4. Debounced sync on state changes (only when authenticated)
     useEffect(() => {
-      if(authState!=="ready")return;
+      if(authState !== "ready") return;
       const{activeView,trackingSession,...cur}=state;
       if(prevState.current){const{activeView:_,trackingSession:__,...prev}=prevState.current;if(JSON.stringify(cur)===JSON.stringify(prev))return;}
       prevState.current=state;
@@ -1232,43 +1299,110 @@
       syncTimeout.current=setTimeout(()=>syncToSheets(state),2000);
     }, [state, authState, syncToSheets]);
 
-    const handleLogin = useCallback(async (token) => {
-      setAuthState("loading"); setLoadMsg("Connecting...");
+    // ── 5. Silent token refresh (request new token before expiry)
+    const scheduleTokenRefresh = useCallback((expiresInSec) => {
+      if (tokenRefreshTimer.current) clearTimeout(tokenRefreshTimer.current);
+      // Refresh 5 minutes before expiry (or at 50min if 1hr token)
+      const refreshIn = Math.max((expiresInSec - 300) * 1000, 30000);
+      tokenRefreshTimer.current = setTimeout(() => {
+        if (!tokenClient.current) return;
+        try {
+          tokenClient.current.requestAccessToken({ prompt: "" });
+        } catch(ex) { console.warn("Token refresh failed:", ex); setSyncStatus("offline"); }
+      }, refreshIn);
+    }, []);
+
+    // ── 6. Try to silently re-authenticate (no popup if user already granted)
+    const tryAutoReauth = useCallback(() => {
+      try {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
+          callback: async (resp) => {
+            if (resp.error) { setSyncStatus("offline"); return; }
+            await connectSheets(resp.access_token, resp.expires_in || 3600);
+          },
+        });
+        tokenClient.current = client;
+        client.requestAccessToken({ prompt: "" });
+      } catch(ex) { setSyncStatus("offline"); }
+    }, []);
+
+    // ── 7. Connect to Sheets (shared by login + auto-reauth)
+    const connectSheets = useCallback(async (token, expiresIn) => {
       sheetsService.accessToken = token;
+      scheduleTokenRefresh(expiresIn || 3600);
       try{const r=await fetch("https://www.googleapis.com/oauth2/v3/userinfo",{headers:{Authorization:"Bearer "+token}});if(r.ok)setUser(await r.json());}catch(ex){}
       try{
-        setLoadMsg("Looking for your data...");
         let id=await sheetsService.findSpreadsheet();
-        if(!id){setLoadMsg("Setting up spreadsheet...");id=await sheetsService.createSpreadsheet();}
+        if(!id) id=await sheetsService.createSpreadsheet();
         sheetsService.spreadsheetId=id;
-        setLoadMsg("Loading workouts...");
-        const data=await sheetsService.loadAll();
-        dispatch({type:"LOAD_FROM_SHEETS",data});
-        prevState.current={...state,...data};
-        setAuthState("ready");
-      }catch(ex){console.error(ex);setLoadMsg("Failed. Try again.");setTimeout(()=>setAuthState("login"),2000);}
-    }, []);
+        // Merge: load from Sheets, but don't overwrite local data if it's newer
+        const remoteData=await sheetsService.loadAll();
+        const localData = loadLocal();
+        // If local has more history entries, prefer local (user was tracking offline)
+        if (localData && localData.history && localData.history.length > (remoteData.history||[]).length) {
+          // Local is ahead — push local to sheets
+          await sheetsService.saveAll({...state});
+        } else {
+          // Remote is same or ahead — load remote
+          dispatch({type:"LOAD_FROM_SHEETS",data:remoteData});
+          prevState.current={...state,...remoteData};
+        }
+        setAuthState("ready"); setSyncStatus("synced");
+      }catch(ex){console.warn("Sheets connect:",ex);setSyncStatus("error");}
+    }, [state, scheduleTokenRefresh]);
 
+    // ── 8. Manual login (first time or re-auth after sign out)
+    const handleLogin = useCallback(async (token) => {
+      setAuthState("loading"); setLoadMsg("Connecting...");
+      await connectSheets(token, 3600);
+      if (authState === "loading") setAuthState("ready");
+    }, [connectSheets]);
+
+    // ── 9. Sign out
     const handleSignOut = useCallback(() => {
       if(sheetsService.accessToken)try{google.accounts.oauth2.revoke(sheetsService.accessToken)}catch(ex){}
-      sheetsService.accessToken=null;sheetsService.spreadsheetId=null;setUser(null);setAuthState("login");
+      sheetsService.accessToken=null;sheetsService.spreadsheetId=null;setUser(null);
+      if(tokenRefreshTimer.current)clearTimeout(tokenRefreshTimer.current);
+      // Don't clear local data — keep it available offline
+      setAuthState("offline"); setSyncStatus("offline");
     }, []);
 
-    if(authState==="loading") return e(LoadingScreen, { message: loadMsg });
+    if(authState==="loading") {
+      const cached = loadLocal();
+      if (cached) return e(LoadingScreen, { message: "Loading..." });
+      return e(LoadingScreen, { message: loadMsg });
+    }
     if(authState==="login") return e(LoginScreen, { onLogin: handleLogin });
+
+    // Reconnect handler for offline mode
+    const handleReconnect = useCallback(() => {
+      try {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
+          callback: async (resp) => {
+            if (resp.error) { setSyncStatus("error"); return; }
+            await connectSheets(resp.access_token, resp.expires_in || 3600);
+          },
+        });
+        tokenClient.current = client;
+        client.requestAccessToken();
+      } catch(ex) { setSyncStatus("error"); }
+    }, [connectSheets]);
 
     return e("div", { style: { minHeight: "100vh", background: "#18181b", color: "#fff", maxWidth: 480, margin: "0 auto" } },
       state.activeView === "tracking" && state.trackingSession
         ? e(TrackingSession, { state, dispatch })
         : [
-          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, user, onSignOut: handleSignOut, syncing }),
+          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, user, onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect }),
           e("div", { key: "content", style: { paddingBottom: 80 } },
             state.activeView === "dashboard" && e(Dashboard, { state, dispatch }),
             state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch }),
             state.activeView === "workouts" && e(WorkoutBuilder, { state, dispatch }),
             state.activeView === "analytics" && e(Analytics, { state }),
             state.activeView === "settings" && e(DataSettings, { state, dispatch, onForceSync: () => syncToSheets(state), onReset: async () => {
-              await sheetsService.resetSpreadsheet();
+              if (sheetsService.accessToken && sheetsService.spreadsheetId) await sheetsService.resetSpreadsheet();
+              clearLocal();
               dispatch({type:"IMPORT_STATE",state:makeInitialState()});
             }}),
           ),
