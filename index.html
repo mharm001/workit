@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.13.0";
+  const APP_VERSION = "2.14.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -914,7 +914,7 @@
           e("div", { style: { fontSize: 9, color: "#71717a" } }, "volume"),
         ),
         stats.avgRir !== null && e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center" } },
-          e("div", { style: { fontSize: 15, fontWeight: 700, color: rirColor(Math.round(stats.avgRir)) } }, stats.avgRir.toFixed(1)),
+          e("div", { style: { fontSize: 15, fontWeight: 700, color: rirColor(Math.round(stats.avgRir)) } }, stats.avgRir.toFixed(1) + " " + rirLabel(Math.round(stats.avgRir))),
           e("div", { style: { fontSize: 9, color: "#71717a" } }, "avg RIR"),
         ),
         stats.improved && e("div", { style: { flex: 2, background: stats.improved.delta > 0 ? "rgba(22,163,74,0.15)" : "#27272a", border: stats.improved.delta > 0 ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", borderRadius: 8, padding: "5px 8px", textAlign: "center" } },
