@@ -1017,11 +1017,12 @@
     const [exercises, setExercises] = useState([]);
     const [showLib, setShowLib] = useState(false);
     const [libCat, setLibCat] = useState("");
+    const [showAllCats, setShowAllCats] = useState(false);
     const wl = Object.values(state.workouts);
 
-    const startNew = () => { setEditing("new"); setName(""); setTargetMuscles([]); setExercises([]); setLibCat(""); };
-    const startEdit = w => { setEditing(w.id); setName(w.name); setTargetMuscles(w.targetMuscles||[]); setExercises(w.exercises.map(x=>({...x}))); setLibCat(""); };
-    const toggleMuscle = cat => setTargetMuscles(prev => prev.includes(cat) ? prev.filter(c=>c!==cat) : [...prev,cat]);
+    const startNew = () => { setEditing("new"); setName(""); setTargetMuscles([]); setExercises([]); setLibCat(""); setShowAllCats(false); };
+    const startEdit = w => { setEditing(w.id); setName(w.name); setTargetMuscles(w.targetMuscles||[]); setExercises(w.exercises.map(x=>({...x}))); setLibCat(""); setShowAllCats(false); };
+    const toggleMuscle = cat => { setTargetMuscles(prev => prev.includes(cat) ? prev.filter(c=>c!==cat) : [...prev,cat]); setLibCat(""); setShowAllCats(false); };
     const addEx = ex => setExercises([...exercises, { id: uid(), name: ex.name, sets: ex.defaultSets, defaultReps: ex.defaultReps, alternatives: [] }]);
     const addCustom = () => setExercises([...exercises, { id: uid(), name: "New Exercise", sets: 3, defaultReps: 10, alternatives: [] }]);
     const updEx = (id, f, v) => setExercises(exercises.map(x => x.id===id ? {...x,[f]:v} : x));
@@ -1031,8 +1032,8 @@
     const remAlt = (id,ai) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:x.alternatives.filter((_,i)=>i!==ai)} : x));
     const save = () => { if(!name.trim())return; dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),targetMuscles,exercises}}); setEditing(null); };
     const del = id => { dispatch({type:"DELETE_WORKOUT",id}); if(editing===id)setEditing(null); };
-    // Library categories: show target muscles first, then "All" option
-    const libCategories = targetMuscles.length > 0 ? [...targetMuscles, ...ALL_MUSCLE_GROUPS.filter(c=>!targetMuscles.includes(c))] : ALL_MUSCLE_GROUPS;
+    // Library categories: only show target muscles unless "Show all" is toggled
+    const libCategories = targetMuscles.length > 0 && !showAllCats ? targetMuscles : ALL_MUSCLE_GROUPS;
     const activeLibCat = libCat || (targetMuscles.length > 0 ? targetMuscles[0] : "chest");
 
     if (editing !== null) {
@@ -1095,10 +1096,11 @@
         e("button", { className: "btn btn-ghost", style: { width: "100%" }, onClick: () => setShowLib(!showLib) }, "+ Add from Library"),
         e("button", { className: "btn btn-ghost", style: { width: "100%", marginTop: 8 }, onClick: addCustom }, "+ Add Custom Exercise"),
         showLib && e("div", { className: "card" },
-          e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 } },
-            libCategories.map((cat, i) => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: activeLibCat===cat?"#f97316": targetMuscles.includes(cat)?"#52341a":"#3f3f46", color: activeLibCat===cat?"#fff": targetMuscles.includes(cat)?"#f97316":"#a1a1aa", fontWeight: targetMuscles.includes(cat)?600:400 }, onClick: () => setLibCat(cat) },
-              cat + (i===0 && targetMuscles.length>0 && targetMuscles.includes(cat) ? " ★" : "")
-            ))
+          e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
+            libCategories.map(cat => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: activeLibCat===cat?"#f97316": targetMuscles.includes(cat)?"#52341a":"#3f3f46", color: activeLibCat===cat?"#fff": targetMuscles.includes(cat)?"#f97316":"#a1a1aa", fontWeight: targetMuscles.includes(cat)?600:400 }, onClick: () => setLibCat(cat) }, cat))
+          ),
+          targetMuscles.length > 0 && e("div", { style: { marginBottom: 8 } },
+            e("button", { style: { background: "none", border: "none", color: "#71717a", fontSize: 11, cursor: "pointer", textDecoration: "underline" }, onClick: () => setShowAllCats(!showAllCats) }, showAllCats ? "Show only target muscles" : "Show all muscles")
           ),
           e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
             (EXERCISE_LIBRARY[activeLibCat]||[]).map(ex => e("button", { key: ex.name, style: { textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onMouseOver: function(ev){ev.target.style.background="#3f3f46"}, onMouseOut: function(ev){ev.target.style.background="transparent"}, onClick: () => addEx(ex) },
