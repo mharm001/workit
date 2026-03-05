@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.22.0";
+  const APP_VERSION = "2.24.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -843,14 +843,12 @@
     return e("div", { style: { position: "sticky", top: 0, zIndex: 50 } },
       e("div", { className: "user-bar" },
         e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-          e("span", { style: { fontSize: 12, color: "#a1a1aa" } }, isConnected ? "Connected" : "Offline"),
           syncing && e("div", { className: "spinner", style: { width: 12, height: 12, borderWidth: 2 } }),
           statusText && e("span", { style: { fontSize: 10, color: statusDot, display: "flex", alignItems: "center", gap: 3 } },
             e("span", { style: { width: 6, height: 6, borderRadius: "50%", background: statusDot, display: "inline-block" } }), statusText),
+          !isConnected && e("button", { onClick: onReconnect, style: { background: "none", border: "none", color: "#f97316", fontSize: 12, cursor: "pointer", padding: 0 } }, "Sync"),
         ),
-        isConnected
-          ? e("button", { onClick: onSignOut, style: { background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer" } }, "Sign out")
-          : e("button", { onClick: onReconnect, style: { background: "none", border: "none", color: "#f97316", fontSize: 12, cursor: "pointer" } }, "Sign in"),
+        isConnected && e("button", { onClick: onSignOut, style: { background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer" } }, "Sign out"),
       ),
       e("div", { className: "tab-bar" },
         tabs.map(t => e("button", { key: t.id, className: "tab" + (activeView === t.id ? " active" : ""), onClick: () => dispatch({type:"SET_VIEW",view:t.id}) },
@@ -1871,7 +1869,21 @@
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
-          setAuthState(target);
+          // If user had an active session, try silent re-auth
+          if (target === "offline") {
+            try {
+              const client = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID, scope: SCOPES, prompt: "",
+                callback: async (resp) => {
+                  if (resp.error) { setAuthState("offline"); setSyncStatus("offline"); return; }
+                  await connectSheets(resp.access_token);
+                },
+              });
+              client.requestAccessToken();
+            } catch(ex) { setAuthState("offline"); setSyncStatus("offline"); }
+          } else {
+            setAuthState(target);
+          }
         }
       }, 200);
       const fb = setTimeout(() => { clearInterval(check); setAuthState(target); }, 3000);
