@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.5.1";
+  const APP_VERSION = "2.6.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1591,15 +1591,25 @@
     const syncTimeout = useRef(null);
     const prevState = useRef(null);
 
-    // ── 1. On mount: always start at login screen
+    // ── 1. On mount: restore cached state if available, otherwise show login
     useEffect(() => {
+      const cached = loadLocal();
+      if (cached) {
+        const { trackingSession, ...data } = cached;
+        dispatch({type:"LOAD_FROM_SHEETS", data});
+        if (trackingSession) {
+          dispatch({type:"START_TRACKING", session: trackingSession});
+        }
+        prevState.current = { ...makeInitialState(), ...data };
+      }
+      const target = cached ? "offline" : "login";
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
-          setAuthState("login");
+          setAuthState(target);
         }
       }, 200);
-      const fb = setTimeout(() => { clearInterval(check); setAuthState("login"); }, 3000);
+      const fb = setTimeout(() => { clearInterval(check); setAuthState(target); }, 3000);
       return () => { clearInterval(check); clearTimeout(fb); };
     }, []);
 
