@@ -74,7 +74,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "1.5.5";
+  const APP_VERSION = "1.5.6";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1405,26 +1405,16 @@
 
     // ── 1. On mount: load from localStorage instantly, then try Google auth
     useEffect(() => {
-      const cached = loadLocal();
-      const signedOut = localStorage.getItem("workit_signed_out") === "1";
-      if (cached && !signedOut) {
-        const { trackingSession, ...data } = cached;
-        dispatch({type:"LOAD_FROM_SHEETS", data});
-        if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
-        prevState.current = { ...makeInitialState(), ...data };
-      }
-      // Wait for Google Identity Services to load, then decide initial state
+      // Always start at login — localStorage is only used to restore data after sign-in
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
-          if (cached && !signedOut) setAuthState("offline");
-          else setAuthState("login");
+          setAuthState("login");
         }
       }, 200);
       const fb = setTimeout(() => {
         clearInterval(check);
-        if (cached && !signedOut) setAuthState("offline");
-        else setAuthState("login");
+        setAuthState("login");
       }, 3000);
       return () => { clearInterval(check); clearTimeout(fb); };
     }, []);
@@ -1475,7 +1465,6 @@
           prevState.current={...makeInitialState(),...remoteData};
         }
         setAuthState("ready"); setSyncStatus("synced");
-        try{localStorage.removeItem("workit_signed_out")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, []);
 
@@ -1490,8 +1479,6 @@
       if(sheetsService.accessToken)try{google.accounts.oauth2.revoke(sheetsService.accessToken)}catch(ex){}
       sheetsService.accessToken=null;sheetsService.spreadsheetId=null;
       // Don't clear local data — keep it available for next sign-in
-      // But flag that user explicitly signed out so reload goes to login, not offline
-      try{localStorage.setItem("workit_signed_out","1")}catch(e){}
       setAuthState("login"); setSyncStatus("");
     }, []);
 
