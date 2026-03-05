@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.5.0";
+  const APP_VERSION = "2.5.1";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -818,7 +818,16 @@
     const todayWId = getTodaysWorkout();
     const todayW = todayWId ? state.workouts[todayWId] : null;
 
-    const streak = useMemo(() => { let c=0; const d=new Date(); for(let i=0;i<365;i++){if(state.history.some(h=>h.date===toDateStr(d)))c++;else if(i>0)break;d.setDate(d.getDate()-1);}return c; }, [state.history]);
+    const consistency = useMemo(() => {
+      var scheduled=0,completed=0,d=new Date();
+      for(var i=0;i<28;i++){
+        var ds=toDateStr(d),day=DAYS[d.getDay()===0?6:d.getDay()-1];
+        var hasScheduled=state.scheduleType==="weekly"?state.weeklySchedule.some(s=>s.day===day&&s.workoutId):state.cadenceSchedule.rotation.length>0;
+        if(hasScheduled){scheduled++;if(state.history.some(h=>h.date===ds))completed++;}
+        d.setDate(d.getDate()-1);
+      }
+      return scheduled>0?Math.round(completed/scheduled*100):0;
+    }, [state.history,state.weeklySchedule,state.cadenceSchedule,state.scheduleType]);
 
     const startTracking = (wid, isOverride) => {
       const w = state.workouts[wid]; if (!w) return;
@@ -836,7 +845,7 @@
       ),
       // Stats
       e("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
-        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, streak), e("div", { className: "stat-label" }, "Day Streak")),
+        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, consistency + "%"), e("div", { className: "stat-label" }, "Consistency")),
         e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, state.history.length), e("div", { className: "stat-label" }, "Workouts")),
         e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, latestWeight ? latestWeight.weight : "—"), e("div", { className: "stat-label" }, latestWeight ? state.weightUnit : "Weight")),
       ),
