@@ -43,9 +43,8 @@
     .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(249,115,22,0.05); }
     .tab-icon { font-size: 16px; display: block; margin-bottom: 2px; }
     .grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-    .effort-bar { display: flex; align-items: center; gap: 6px; }
-    .effort-bar input[type=range] { flex: 1; -webkit-appearance: none; background: #3f3f46; border-radius: 4px; height: 6px; outline: none; }
-    .effort-bar input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+    .rir-pills { display: flex; gap: 3px; }
+    .rir-pill { padding: 3px 6px; border-radius: 4px; border: none; font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
     select { background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; padding: 8px 32px 8px 12px; color: #fff; font-size: 14px; outline: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 8px center; background-repeat: no-repeat; background-size: 1.2em; }
     select:focus { border-color: var(--accent); }
     .flex-center { display: flex; align-items: center; justify-content: center; }
@@ -74,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.2.0";
+  const APP_VERSION = "2.3.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -339,7 +338,17 @@
   const DAY_LABELS = {monday:"Mon",tuesday:"Tue",wednesday:"Wed",thursday:"Thu",friday:"Fri",saturday:"Sat",sunday:"Sun"};
   const todayDay = () => DAYS[new Date().getDay()===0?6:new Date().getDay()-1];
   const toDateStr = (d) => d.toISOString().split("T")[0];
-  const effortColor = (v) => v<=3?"#4ade80":v<=6?"#facc15":v<=8?"#fb923c":"#ef4444";
+  // RIR scale: 0=Failure, 1=RIR 1-2, 2=RIR 3-4, 3=Warmup
+  const RIR_OPTIONS = [
+    { value: 0, label: "Failure", short: "F", color: "#ef4444" },
+    { value: 1, label: "RIR 1-2", short: "1-2", color: "#fb923c" },
+    { value: 2, label: "RIR 3-4", short: "3-4", color: "#facc15" },
+    { value: 3, label: "Warmup", short: "W", color: "#71717a" },
+  ];
+  const rirColor = (v) => (RIR_OPTIONS.find(r=>r.value===v)||RIR_OPTIONS[1]).color;
+  const rirLabel = (v) => (RIR_OPTIONS.find(r=>r.value===v)||RIR_OPTIONS[1]).short;
+  // Legacy effort → RIR migration: map old 1-10 effort to new RIR
+  const effortToRir = (v) => v >= 9 ? 0 : v >= 7 ? 1 : v >= 4 ? 2 : 3;
 
   // ─── Exercise Helpers ────────────────────────────────────────────
   // Build a reverse lookup: exercise name → category
@@ -399,7 +408,7 @@
       this.spreadsheetId = data.spreadsheetId;
       await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values:batchUpdate", { method:"POST", body: JSON.stringify({ valueInputOption:"RAW", data:[
         {range:"config!A1:B1",values:[["key","value"]]},
-        {range:"history!A1:G1",values:[["Date","Workout","Exercise","Set #","Reps","Weight (lbs)","Effort (1-10)"]]},
+        {range:"history!A1:H1",values:[["Date","Workout","Exercise","Set #","Reps","Weight","RIR","Warmup"]]},
         {range:"weight!A1:B1",values:[["Date","Weight (lbs)"]]}
       ]})});
       return this.spreadsheetId;
@@ -415,13 +424,15 @@
       if (values.length > 0) await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values/"+encodeURIComponent(range)+"?valueInputOption=RAW",{method:"PUT",body:JSON.stringify({range,values})});
     },
 
-    // ── Flatten history entries into rows: Date | Workout | Exercise | Set# | Reps | Weight | Effort
+    // ── Flatten history entries into rows: Date | Workout | Exercise | Set# | Reps | Weight | RIR | Warmup
     _flattenHistory(history) {
-      const rows = [["Date","Workout","Exercise","Set #","Reps","Weight (lbs)","Effort (1-10)"]];
+      const rows = [["Date","Workout","Exercise","Set #","Reps","Weight","RIR","Warmup"]];
       history.forEach(function(entry) {
         (entry.exercises||[]).forEach(function(ex) {
           (ex.sets||[]).forEach(function(set, si) {
-            rows.push([entry.date, entry.workoutName||"Unknown", ex.name, si+1, set.reps, set.weight, set.effort]);
+            var rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToRir(set.effort) : 2);
+            var warmup = set.warmup || rir === 3;
+            rows.push([entry.date, entry.workoutName||"Unknown", ex.name, si+1, set.reps, set.weight, rir, warmup?"Y":"N"]);
           });
         });
       });
@@ -437,7 +448,10 @@
         if (!groups[key]) groups[key] = { date: r[0], workoutId: null, workoutName: r[1]||"Unknown", wasOverride: false, exercises: {} };
         var exName = r[2]||"";
         if (!groups[key].exercises[exName]) groups[key].exercises[exName] = { exerciseId: exName, name: exName, sets: [] };
-        groups[key].exercises[exName].sets.push({ reps: parseInt(r[4])||0, weight: parseFloat(r[5])||0, effort: parseInt(r[6])||5 });
+        // Support both old (7-col effort) and new (8-col RIR+warmup) format
+        var rir = r.length >= 8 ? (parseInt(r[6])||2) : (r[6] !== undefined ? effortToRir(parseInt(r[6])||5) : 2);
+        var warmup = r.length >= 8 ? r[7]==="Y" : false;
+        groups[key].exercises[exName].sets.push({ reps: parseInt(r[4])||0, weight: parseFloat(r[5])||0, rir: rir, warmup: warmup });
       });
       return Object.values(groups).map(function(g) {
         return { date: g.date, workoutId: g.workoutId, workoutName: g.workoutName, wasOverride: g.wasOverride, exercises: Object.values(g.exercises) };
@@ -492,7 +506,7 @@
       if (!this.spreadsheetId) return;
       await Promise.all([
         this._clearAndWrite("config!A1:B200", [["key","value"]]),
-        this._clearAndWrite("history!A1:G50000", [["Date","Workout","Exercise","Set #","Reps","Weight (lbs)","Effort (1-10)"]]),
+        this._clearAndWrite("history!A1:H50000", [["Date","Workout","Exercise","Set #","Reps","Weight","RIR","Warmup"]]),
         this._clearAndWrite("weight!A1:B1000", [["Date","Weight (lbs)"]]),
       ]);
     },
@@ -510,7 +524,7 @@
       const weightVals = [["Date","Weight ("+unit+")"]].concat(state.weightLog.map(function(w){return[w.date,String(w.weight)]}));
       await Promise.all([
         this._clearAndWrite("config!A1:B200", configVals),
-        this._clearAndWrite("history!A1:G50000", historyVals),
+        this._clearAndWrite("history!A1:H50000", historyVals),
         this._clearAndWrite("weight!A1:B1000", weightVals),
       ]);
     },
@@ -726,7 +740,7 @@
             e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 20 } },
               e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "#525252", marginBottom: 10 } }, "What is Workit?"),
               e("p", { style: { fontSize: 12, color: "#71717a", lineHeight: 1.6, margin: 0 } },
-                "A free workout tracker that saves your data to a Google Sheet you own. Create custom workouts, log reps, weight, and effort per set, and track your progress over time. Works offline \u2014 syncs when you\u2019re back online."),
+                "A free workout tracker that saves your data to a Google Sheet you own. Create custom workouts, log reps, weight, and RIR per set, and track your progress over time. Works offline \u2014 syncs when you\u2019re back online."),
             ),
             // Privacy & Trust
             e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 20 } },
@@ -829,7 +843,7 @@
     const startTracking = (wid, isOverride) => {
       const w = state.workouts[wid]; if (!w) return;
       if (isOverride) dispatch({type:"OVERRIDE_TODAY",newWorkoutId:wid});
-      dispatch({type:"START_TRACKING",session:{workoutId:wid,wasOverride:!!isOverride,exercises:w.exercises.map(ex=>({exerciseId:ex.id,name:ex.name,sets:Array.from({length:ex.sets},()=>({reps:ex.defaultReps,weight:0,effort:5}))}))}});
+      dispatch({type:"START_TRACKING",session:{workoutId:wid,wasOverride:!!isOverride,exercises:w.exercises.map(ex=>({exerciseId:ex.id,name:ex.name,sets:Array.from({length:ex.sets},()=>({reps:ex.defaultReps,weight:0,rir:2,warmup:false}))}))}});
       setShowOverride(false);
     };
     const logWeight = () => { const w=parseFloat(weightInput); if(!isNaN(w)&&w>0){dispatch({type:"LOG_WEIGHT",date:todayStr,weight:w});setWeightInput("");} };
@@ -1157,7 +1171,7 @@
       dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}});
     };
     const addSet = ei => {
-      const exs = s.exercises.map((ex,i)=>{if(i!==ei)return ex;const last=ex.sets[ex.sets.length-1]||{reps:10,weight:0,effort:5};return{...ex,sets:[...ex.sets,{...last}]};});
+      const exs = s.exercises.map((ex,i)=>{if(i!==ei)return ex;const last=ex.sets[ex.sets.length-1]||{reps:10,weight:0,rir:2,warmup:false};return{...ex,sets:[...ex.sets,{...last}]};});
       dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}});
     };
     const remSet = (ei,si) => {
@@ -1190,25 +1204,29 @@
             : e("p", { style: { fontSize: 12, color: "#52525b" } }, "No alternatives defined."),
         ),
         // Header row
-        e("div", { style: { display: "grid", gridTemplateColumns: "24px 1fr 70px 1fr 24px", gap: 4, marginBottom: 4 } },
+        e("div", { style: { display: "grid", gridTemplateColumns: "24px 1fr 60px auto 24px", gap: 4, marginBottom: 4 } },
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
-          e("div", { style: { fontSize: 10, color: "#71717a" } }, state.weightUnit==="kg"?"kg":"lbs"),
+          e("div", { style: { fontSize: 10, color: "#71717a" } }, state.weightUnit),
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "Reps"),
-          e("div", { style: { fontSize: 10, color: "#71717a" } }, "Effort"),
+          e("div", { style: { fontSize: 10, color: "#71717a" } }, "RIR"),
           e("div"),
         ),
-        ex.sets.map((set, si) => e("div", { key: si, style: { display: "grid", gridTemplateColumns: "24px 1fr 70px 1fr 24px", gap: 4, alignItems: "center", marginBottom: 4 } },
-          e("div", { style: { fontSize: 12, color: "#71717a" } }, si+1),
-          e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
-          e("input", { name: "setReps", type: "number", min: 0, value: set.reps, onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
-          e("div", { className: "effort-bar" },
-            e("input", { name: "setEffort", type: "range", min: 1, max: 10, value: set.effort, onInput: ev => updSet(ei,si,"effort",parseInt(ev.target.value)) }),
-            e("span", { style: { fontSize: 11, fontFamily: "monospace", color: effortColor(set.effort), minWidth: 16, textAlign: "right" } }, set.effort),
-          ),
-          e("button", { onClick: ()=>remSet(ei,si), style: { background:"none",border:"none",color:"#52525b",cursor:"pointer",fontSize:12 } }, "✕"),
-        )),
+        ex.sets.map((set, si) => {
+          const rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToRir(set.effort) : 2);
+          const isWarmup = set.warmup || rir === 3;
+          return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "24px 1fr 60px auto 24px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
+            e("div", { style: { fontSize: 12, color: "#71717a" } }, si+1),
+            e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
+            e("input", { name: "setReps", type: "number", min: 0, value: set.reps, onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
+            e("div", { className: "rir-pills" },
+              RIR_OPTIONS.map(opt => e("button", { key: opt.value, className: "rir-pill", style: { background: rir===opt.value ? opt.color : "#27272a", color: rir===opt.value ? (opt.value===3?"#a1a1aa":"#000") : "#52525b" }, onClick: () => { updSet(ei,si,"rir",opt.value); if(opt.value===3)updSet(ei,si,"warmup",true); else updSet(ei,si,"warmup",false); } }, opt.short))
+            ),
+            e("button", { onClick: ()=>remSet(ei,si), style: { background:"none",border:"none",color:"#52525b",cursor:"pointer",fontSize:12 } }, "✕"),
+          );
+        }),
         e("button", { className: "btn btn-ghost", style: { width: "100%", fontSize: 12, padding: 6, marginTop: 4 }, onClick: ()=>addSet(ei) }, "+ Add Set"),
       )),
+      e("div", { style: { fontSize: 11, color: "#52525b", textAlign: "center", padding: "4px 0" } }, "Warmup sets (W) are excluded from stats and PRs."),
       e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: ()=>dispatch({type:"SAVE_WORKOUT"}) }, "Save Workout"),
     );
   }
@@ -1226,18 +1244,19 @@
       if(!selEx)return[];
       return state.history.filter(h=>h.exercises.some(x=>x.name===selEx)).map(h=>{
         const x=h.exercises.find(ex=>ex.name===selEx);
-        return{date:h.date.slice(5),maxWeight:Math.max(...x.sets.map(s=>s.weight)),totalReps:x.sets.reduce((a,s)=>a+s.reps,0),avgEffort:Math.round(x.sets.reduce((a,s)=>a+s.effort,0)/x.sets.length*10)/10};
+        const workSets=x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3));
+        return{date:h.date.slice(5),maxWeight:workSets.length?Math.max(...workSets.map(s=>s.weight)):0,totalReps:workSets.reduce((a,s)=>a+s.reps,0),avgRir:workSets.length?Math.round(workSets.reduce((a,s)=>a+(s.rir!==undefined?s.rir:2),0)/workSets.length*10)/10:0};
       });
     },[selEx,state.history]);
 
     const volTrend = useMemo(()=>{
-      return(selW?state.history.filter(h=>h.workoutName===selW):state.history).map(h=>({date:h.date.slice(5),volume:h.exercises.reduce((a,x)=>a+x.sets.reduce((b,s)=>b+s.reps*s.weight,0),0)}));
+      return(selW?state.history.filter(h=>h.workoutName===selW):state.history).map(h=>({date:h.date.slice(5),volume:h.exercises.reduce((a,x)=>a+x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3)).reduce((b,s)=>b+s.reps*s.weight,0),0)}));
     },[selW,state.history]);
 
     const weightData = state.weightLog.map(w => ({ date: w.date.slice(5), weight: w.weight }));
 
     const prs = useMemo(()=>{
-      const r={};state.history.forEach(h=>h.exercises.forEach(x=>x.sets.forEach(s=>{if(!r[x.name]||s.weight>r[x.name].weight)r[x.name]={weight:s.weight,reps:s.reps,date:h.date};})));
+      const r={};state.history.forEach(h=>h.exercises.forEach(x=>x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3)).forEach(s=>{if(!r[x.name]||s.weight>r[x.name].weight)r[x.name]={weight:s.weight,reps:s.reps,date:h.date};})));
       return Object.entries(r).filter(([,v])=>v.weight>0).sort((a,b)=>b[1].weight-a[1].weight);
     },[state.history]);
 
@@ -1377,8 +1396,8 @@
           [
             ["1.", "Create workouts", "Define exercises, sets, and reps in the Workouts tab. Choose from 200+ exercises across 12 muscle groups."],
             ["2.", "Set your schedule", "Use Weekly mode to assign workouts to specific days, or Split mode to rotate through a cycle."],
-            ["3.", "Track daily", "Open the app, start today's workout, and log your reps, weight, and effort (1\u201310) per set."],
-            ["4.", "Review progress", "Check the Stats tab for trends in volume, weight, and effort over time."],
+            ["3.", "Track daily", "Open the app, start today\u2019s workout, and log reps, weight, and RIR (Reps in Reserve) per set. Mark warmup sets separately."],
+            ["4.", "Review progress", "Check the Stats tab for trends in volume and weight over time. Warmup sets are excluded from analytics."],
           ].map(function(item) {
             return e("div", { key: item[0], style: { display: "flex", gap: 10 } },
               e("div", { style: { fontSize: 13, fontWeight: 700, color: "#f97316", minWidth: 20 } }, item[0]),
