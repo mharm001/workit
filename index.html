@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.7.1";
+  const APP_VERSION = "2.8.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -535,13 +535,20 @@
         };
       }
       case "START_TRACKING": return { ...state, trackingSession: action.session, activeView: "tracking" };
+      case "EDIT_WORKOUT": return { ...state, trackingSession: { ...action.session, editingDate: action.editingDate }, activeView: "tracking" };
       case "UPDATE_TRACKING": return { ...state, trackingSession: { ...state.trackingSession, ...action.data } };
       case "SAVE_WORKOUT": {
         const s = state.trackingSession;
-        const entry = { date: toDateStr(new Date()), workoutId: s.workoutId, workoutName: (state.workouts[s.workoutId]||{}).name||"Unknown", wasOverride: s.wasOverride||false, exercises: s.exercises };
+        const entry = { date: s.editingDate || toDateStr(new Date()), workoutId: s.workoutId, workoutName: (state.workouts[s.workoutId]||{}).name||"Unknown", wasOverride: s.wasOverride||false, exercises: s.exercises };
+        let hist = state.history;
+        if (s.editingDate) {
+          hist = state.history.map(h => h.date === s.editingDate && h.workoutId === s.workoutId ? entry : h);
+        } else {
+          hist = [...state.history, entry];
+        }
         let cad = state.cadenceSchedule;
-        if (state.scheduleType === "cadence" && cad.rotation.length > 0) cad = { ...cad, currentIndex: (cad.currentIndex + 1) % cad.rotation.length };
-        return { ...state, history: [...state.history, entry], cadenceSchedule: cad, trackingSession: null, activeView: "dashboard" };
+        if (!s.editingDate && state.scheduleType === "cadence" && cad.rotation.length > 0) cad = { ...cad, currentIndex: (cad.currentIndex + 1) % cad.rotation.length };
+        return { ...state, history: hist, cadenceSchedule: cad, trackingSession: null, activeView: "dashboard" };
       }
       case "CANCEL_TRACKING": return { ...state, trackingSession: null, activeView: "dashboard" };
       case "OVERRIDE_TODAY": {
@@ -806,7 +813,8 @@
     const [showOverride, setShowOverride] = useState(false);
     const workoutList = Object.values(state.workouts);
     const todayStr = toDateStr(new Date());
-    const alreadyTracked = state.history.some(h => h.date === todayStr);
+    const todayEntry = state.history.find(h => h.date === todayStr);
+    const alreadyTracked = !!todayEntry;
     const lastWorkout = state.history.length > 0 ? state.history[state.history.length - 1] : null;
     const latestWeight = state.weightLog.length > 0 ? state.weightLog[state.weightLog.length - 1] : null;
 
@@ -835,6 +843,9 @@
       dispatch({type:"START_TRACKING",session:{workoutId:wid,wasOverride:!!isOverride,exercises:w.exercises.map(ex=>({exerciseId:ex.id,name:ex.name,sets:Array.from({length:ex.sets},()=>({reps:ex.defaultReps,weight:0,rir:2,warmup:false}))}))}});
       setShowOverride(false);
     };
+    const editWorkout = (entry) => {
+      dispatch({type:"EDIT_WORKOUT", editingDate: entry.date, session:{workoutId:entry.workoutId,wasOverride:entry.wasOverride||false,exercises:entry.exercises}});
+    };
     const logWeight = () => { const w=parseFloat(weightInput); if(!isNaN(w)&&w>0){dispatch({type:"LOG_WEIGHT",date:todayStr,weight:w});setWeightInput("");} };
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
@@ -854,14 +865,19 @@
         todayW ? [
           e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 } },
             e("div", null,
-              e("div", { className: "label" }, "Today's Workout"),
+              e("div", { className: "label" }, alreadyTracked ? "Today's Workout — Completed" : "Today's Workout"),
               e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayW.name),
-              e("div", { className: "text-muted", style: { fontSize: 12 } }, todayW.exercises.length + " exercises"),
+              e("div", { className: "text-muted", style: { fontSize: 12 } }, alreadyTracked
+                ? todayEntry.exercises.reduce((a,ex) => a + ex.sets.filter(s=>!s.warmup).length, 0) + " sets logged"
+                : todayW.exercises.length + " exercises"),
             ),
             alreadyTracked && e("span", { className: "pill", style: { background: "rgba(22,101,52,0.5)", color: "#86efac" } }, "Done"),
           ),
-          e("div", { key: "b", style: { display: "flex", gap: 8 } },
-            e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => startTracking(todayWId) }, alreadyTracked ? "Track Again" : "Track Workout"),
+          alreadyTracked ? e("div", { key: "b", style: { display: "flex", gap: 8 } },
+            e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => editWorkout(todayEntry) }, "Edit Workout"),
+            e("button", { className: "btn btn-dark", onClick: () => startTracking(todayWId) }, "Track Again"),
+          ) : e("div", { key: "b", style: { display: "flex", gap: 8 } },
+            e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => startTracking(todayWId) }, "Track Workout"),
             e("button", { className: "btn btn-dark", onClick: () => setShowOverride(!showOverride) }, "Override"),
           ),
           showOverride && e("div", { key: "o", style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 8 } },
@@ -1178,7 +1194,7 @@
       e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
         e("div", null,
           e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, (w||{}).name || "Workout"),
-          s.wasOverride && e("span", { style: { fontSize: 12, color: "#f97316" } }, "Override"),
+          s.editingDate ? e("span", { style: { fontSize: 12, color: "#60a5fa" } }, "Editing") : s.wasOverride && e("span", { style: { fontSize: 12, color: "#f97316" } }, "Override"),
         ),
         e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>dispatch({type:"CANCEL_TRACKING"}) }, "Cancel"),
       ),
@@ -1223,7 +1239,7 @@
         e("button", { className: "btn btn-ghost", style: { width: "100%", fontSize: 12, padding: 6, marginTop: 4 }, onClick: ()=>addSet(ei) }, "+ Add Set"),
       )),
       e("div", { style: { fontSize: 11, color: "#52525b", textAlign: "center", padding: "4px 0" } }, "Warmup sets (W) are excluded from stats and PRs."),
-      e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: ()=>dispatch({type:"SAVE_WORKOUT"}) }, "Save Workout"),
+      e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: ()=>dispatch({type:"SAVE_WORKOUT"}) }, s.editingDate ? "Update Workout" : "Save Workout"),
     );
   }
 
