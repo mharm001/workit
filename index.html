@@ -338,11 +338,11 @@
   const DAY_LABELS = {monday:"Mon",tuesday:"Tue",wednesday:"Wed",thursday:"Thu",friday:"Fri",saturday:"Sat",sunday:"Sun"};
   const todayDay = () => DAYS[new Date().getDay()===0?6:new Date().getDay()-1];
   const toDateStr = (d) => d.toISOString().split("T")[0];
-  // RIR scale: 0=Failure, 1=RIR 1-2, 2=RIR 3-4, 3=Warmup
+  // RIR scale: F=Failure, M=Moderate (1-2 RIR), L=Light (3-4 RIR), W=Warmup
   const RIR_OPTIONS = [
     { value: 0, label: "Failure", short: "F", color: "#ef4444" },
-    { value: 1, label: "RIR 1-2", short: "1-2", color: "#fb923c" },
-    { value: 2, label: "RIR 3-4", short: "3-4", color: "#facc15" },
+    { value: 1, label: "Moderate 1-2 RIR", short: "M", color: "#fb923c" },
+    { value: 2, label: "Light 3-4 RIR", short: "L", color: "#facc15" },
     { value: 3, label: "Warmup", short: "W", color: "#71717a" },
   ];
   const rirColor = (v) => (RIR_OPTIONS.find(r=>r.value===v)||RIR_OPTIONS[1]).color;
@@ -1191,6 +1191,12 @@
           s.wasOverride && e("span", { style: { fontSize: 12, color: "#f97316" } }, "Override"),
         ),
         e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>dispatch({type:"CANCEL_TRACKING"}) }, "Cancel"),
+      ),
+      e("div", { style: { display: "flex", gap: 12, flexWrap: "wrap", padding: "4px 0" } },
+        RIR_OPTIONS.map(opt => e("span", { key: opt.value, style: { fontSize: 11, color: "#71717a", display: "flex", alignItems: "center", gap: 4 } },
+          e("span", { style: { display: "inline-block", width: 14, height: 14, borderRadius: 3, background: opt.color, textAlign: "center", lineHeight: "14px", fontSize: 9, fontWeight: 700, color: opt.value===3?"#a1a1aa":"#000" } }, opt.short),
+          opt.label,
+        )),
       ),
       s.exercises.map((ex, ei) => e("div", { key: ex.exerciseId+ei, className: "card" },
         e("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 12 } },
