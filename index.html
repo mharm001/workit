@@ -356,11 +356,13 @@
     async createSpreadsheet() {
       const data = await this._fetch(SHEETS_API, { method: "POST", body: JSON.stringify({
         properties: { title: SPREADSHEET_NAME },
-        sheets: [{properties:{title:"config",index:0}},{properties:{title:"workouts",index:1}},{properties:{title:"history",index:2}},{properties:{title:"weight",index:3}}],
+        sheets: [{properties:{title:"config",index:0}},{properties:{title:"history",index:1}},{properties:{title:"weight",index:2}}],
       })});
       this.spreadsheetId = data.spreadsheetId;
       await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values:batchUpdate", { method:"POST", body: JSON.stringify({ valueInputOption:"RAW", data:[
-        {range:"config!A1:B1",values:[["key","value"]]},{range:"workouts!A1:B1",values:[["id","json"]]},{range:"history!A1:B1",values:[["date","json"]]},{range:"weight!A1:B1",values:[["date","weight"]]}
+        {range:"config!A1:B1",values:[["key","value"]]},
+        {range:"history!A1:G1",values:[["Date","Workout","Exercise","Set #","Reps","Weight (lbs)","Effort (1-10)"]]},
+        {range:"weight!A1:B1",values:[["Date","Weight (lbs)"]]}
       ]})});
       return this.spreadsheetId;
     },
@@ -375,15 +377,47 @@
       if (values.length > 0) await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values/"+encodeURIComponent(range)+"?valueInputOption=RAW",{method:"PUT",body:JSON.stringify({range,values})});
     },
 
+    // ── Flatten history entries into rows: Date | Workout | Exercise | Set# | Reps | Weight | Effort
+    _flattenHistory(history) {
+      const rows = [["Date","Workout","Exercise","Set #","Reps","Weight (lbs)","Effort (1-10)"]];
+      history.forEach(function(entry) {
+        (entry.exercises||[]).forEach(function(ex) {
+          (ex.sets||[]).forEach(function(set, si) {
+            rows.push([entry.date, entry.workoutName||"Unknown", ex.name, si+1, set.reps, set.weight, set.effort]);
+          });
+        });
+      });
+      return rows;
+    },
+
+    // ── Parse flat history rows back into structured entries grouped by date+workout
+    _parseHistory(rows) {
+      const groups = {};
+      rows.forEach(function(r) {
+        if (!r[0] || r[0]==="Date") return;
+        var key = r[0] + "|" + (r[1]||"");
+        if (!groups[key]) groups[key] = { date: r[0], workoutId: null, workoutName: r[1]||"Unknown", wasOverride: false, exercises: {} };
+        var exName = r[2]||"";
+        if (!groups[key].exercises[exName]) groups[key].exercises[exName] = { exerciseId: exName, name: exName, sets: [] };
+        groups[key].exercises[exName].sets.push({ reps: parseInt(r[4])||0, weight: parseFloat(r[5])||0, effort: parseInt(r[6])||5 });
+      });
+      return Object.values(groups).map(function(g) {
+        return { date: g.date, workoutId: g.workoutId, workoutName: g.workoutName, wasOverride: g.wasOverride, exercises: Object.values(g.exercises) };
+      });
+    },
+
     async loadAll() {
-      const [configRows, workoutRows, historyRows, weightRows] = await Promise.all([
-        this._getValues("config!A2:B100"), this._getValues("workouts!A2:B1000"), this._getValues("history!A2:B10000"), this._getValues("weight!A2:B1000")
+      const [configRows, historyRows, weightRows] = await Promise.all([
+        this._getValues("config!A2:B200"), this._getValues("history!A2:G50000"), this._getValues("weight!A2:B1000")
       ]);
       const config = {};
       configRows.forEach(function(r){ try{config[r[0]]=JSON.parse(r[1])}catch(e){config[r[0]]=r[1]} });
-      const workouts = {};
-      workoutRows.forEach(function(r){ try{workouts[r[0]]=JSON.parse(r[1])}catch(e){} });
-      const history = historyRows.map(function(r){ try{return JSON.parse(r[1])}catch(e){return null} }).filter(Boolean);
+      const workouts = config.workouts || {};
+      const history = this._parseHistory(historyRows);
+      // Restore workoutId references by matching workout names
+      history.forEach(function(h) {
+        Object.entries(workouts).forEach(function(e) { if (e[1].name === h.workoutName) h.workoutId = e[0]; });
+      });
       const weightLog = weightRows.map(function(r){ return {date:r[0],weight:parseFloat(r[1])} }).filter(function(w){return !isNaN(w.weight)});
       return {
         scheduleType: config.scheduleType || "weekly",
@@ -394,14 +428,17 @@
     },
 
     async saveAll(state) {
-      const configVals = [["key","value"],["scheduleType",JSON.stringify(state.scheduleType)],["weeklySchedule",JSON.stringify(state.weeklySchedule)],["cadenceSchedule",JSON.stringify(state.cadenceSchedule)]];
-      const workoutVals = [["id","json"]].concat(Object.entries(state.workouts).map(function(e){return[e[0],JSON.stringify(e[1])]}));
-      const historyVals = [["date","json"]].concat(state.history.map(function(h){return[h.date,JSON.stringify(h)]}));
-      const weightVals = [["date","weight"]].concat(state.weightLog.map(function(w){return[w.date,String(w.weight)]}));
+      const configVals = [["key","value"],
+        ["scheduleType",JSON.stringify(state.scheduleType)],
+        ["weeklySchedule",JSON.stringify(state.weeklySchedule)],
+        ["cadenceSchedule",JSON.stringify(state.cadenceSchedule)],
+        ["workouts",JSON.stringify(state.workouts)]
+      ];
+      const historyVals = this._flattenHistory(state.history);
+      const weightVals = [["Date","Weight (lbs)"]].concat(state.weightLog.map(function(w){return[w.date,String(w.weight)]}));
       await Promise.all([
-        this._clearAndWrite("config!A1:B100", configVals),
-        this._clearAndWrite("workouts!A1:B1000", workoutVals),
-        this._clearAndWrite("history!A1:B10000", historyVals),
+        this._clearAndWrite("config!A1:B200", configVals),
+        this._clearAndWrite("history!A1:G50000", historyVals),
         this._clearAndWrite("weight!A1:B1000", weightVals),
       ]);
     },
