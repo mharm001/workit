@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.3.0";
+  const APP_VERSION = "2.4.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -349,6 +349,8 @@
   const rirLabel = (v) => (RIR_OPTIONS.find(r=>r.value===v)||RIR_OPTIONS[1]).short;
   // Legacy effort → RIR migration: map old 1-10 effort to new RIR
   const effortToRir = (v) => v >= 9 ? 0 : v >= 7 ? 1 : v >= 4 ? 2 : 3;
+  // Strength Score: Epley e1RM = weight × (1 + reps/30). Returns 0 for bodyweight/invalid.
+  const calcE1RM = (weight, reps) => (weight > 0 && reps > 0) ? Math.round(weight * (1 + reps / 30)) : 0;
 
   // ─── Exercise Helpers ────────────────────────────────────────────
   // Build a reverse lookup: exercise name → category
@@ -1251,7 +1253,8 @@
       return state.history.filter(h=>h.exercises.some(x=>x.name===selEx)).map(h=>{
         const x=h.exercises.find(ex=>ex.name===selEx);
         const workSets=x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3));
-        return{date:h.date.slice(5),maxWeight:workSets.length?Math.max(...workSets.map(s=>s.weight)):0,totalReps:workSets.reduce((a,s)=>a+s.reps,0),avgRir:workSets.length?Math.round(workSets.reduce((a,s)=>a+(s.rir!==undefined?s.rir:2),0)/workSets.length*10)/10:0};
+        const bestE1RM=workSets.length?Math.max(...workSets.map(s=>calcE1RM(s.weight,s.reps))):0;
+        return{date:h.date.slice(5),maxWeight:workSets.length?Math.max(...workSets.map(s=>s.weight)):0,totalReps:workSets.reduce((a,s)=>a+s.reps,0),avgRir:workSets.length?Math.round(workSets.reduce((a,s)=>a+(s.rir!==undefined?s.rir:2),0)/workSets.length*10)/10:0,strengthScore:bestE1RM};
       });
     },[selEx,state.history]);
 
@@ -1259,11 +1262,23 @@
       return(selW?state.history.filter(h=>h.workoutName===selW):state.history).map(h=>({date:h.date.slice(5),volume:h.exercises.reduce((a,x)=>a+x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3)).reduce((b,s)=>b+s.reps*s.weight,0),0)}));
     },[selW,state.history]);
 
+    const intensityTrend = useMemo(()=>{
+      return(selW?state.history.filter(h=>h.workoutName===selW):state.history).map(h=>{
+        const workSets=h.exercises.flatMap(x=>x.sets).filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3));
+        if(!workSets.length)return null;
+        const avg=Math.round(workSets.reduce((a,s)=>a+(s.rir!==undefined?s.rir:2),0)/workSets.length*10)/10;
+        return{date:h.date.slice(5),avgRir:avg};
+      }).filter(Boolean);
+    },[selW,state.history]);
+
     const weightData = state.weightLog.map(w => ({ date: w.date.slice(5), weight: w.weight }));
 
     const prs = useMemo(()=>{
-      const r={};state.history.forEach(h=>h.exercises.forEach(x=>x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3)).forEach(s=>{if(!r[x.name]||s.weight>r[x.name].weight)r[x.name]={weight:s.weight,reps:s.reps,date:h.date};})));
-      return Object.entries(r).filter(([,v])=>v.weight>0).sort((a,b)=>b[1].weight-a[1].weight);
+      const r={};state.history.forEach(h=>h.exercises.forEach(x=>x.sets.filter(s=>!s.warmup&&(s.rir===undefined||s.rir!==3)).forEach(s=>{
+        const e1rm=calcE1RM(s.weight,s.reps);
+        if(!r[x.name]||e1rm>r[x.name].e1rm)r[x.name]={weight:s.weight,reps:s.reps,date:h.date,e1rm:e1rm};
+      })));
+      return Object.entries(r).filter(([,v])=>v.e1rm>0).sort((a,b)=>b[1].e1rm-a[1].e1rm);
     },[state.history]);
 
     if (state.history.length === 0) return e("div", { style: { padding: 16 } },
@@ -1289,6 +1304,44 @@
         ),
         e(MiniBarChart, { data: volTrend, dataKey: "volume", color: "#f97316", width: 340, height: 160 }),
       ),
+      // Intensity trend
+      intensityTrend.length >= 2 && e("div", { className: "card" },
+        e("div", { className: "label", style: { marginBottom: 8 } }, "Intensity Trend (Avg RIR)"),
+        (function(){
+          var d=intensityTrend,w=340,h=140,pad=40;
+          var pts=d.map(function(p,i){
+            var x=pad+(i/(d.length-1))*(w-pad*2);
+            var y=pad+((p.avgRir)/2.5)*(h-pad*2); // 0(failure)=top, 2.5(light)=bottom
+            var c=p.avgRir<=0.5?"#ef4444":p.avgRir<=1.5?"#fb923c":"#facc15";
+            return{x:x,y:y,c:c,date:p.date,v:p.avgRir};
+          });
+          var pathD=pts.map(function(p,i){return(i===0?"M":"L")+p.x+","+p.y}).join(" ");
+          return e("div",{style:{overflowX:"auto"}},
+            e("svg",{width:w,height:h,viewBox:"0 0 "+w+" "+h,style:{display:"block",margin:"0 auto"}},
+              // Y labels: F at top, L at bottom
+              [["F",0],["M",1],["L",2]].map(function(pair){
+                var yy=pad+(pair[1]/2.5)*(h-pad*2);
+                var col=pair[1]===0?"#ef4444":pair[1]===1?"#fb923c":"#facc15";
+                return e("g",{key:pair[0]},
+                  e("line",{x1:pad,y1:yy,x2:w-pad,y2:yy,stroke:"#3f3f46",strokeDasharray:"3,3"}),
+                  e("text",{x:pad-6,y:yy+4,textAnchor:"end",fill:col,fontSize:10,fontWeight:600},pair[0]),
+                );
+              }),
+              // X labels
+              d.length<=12?pts.map(function(p,i){return e("text",{key:"x"+i,x:p.x,y:h-pad+14,textAnchor:"middle",fill:"#71717a",fontSize:8},p.date)})
+              :[0,Math.floor(d.length/2),d.length-1].map(function(i){return e("text",{key:"x"+i,x:pts[i].x,y:h-pad+14,textAnchor:"middle",fill:"#71717a",fontSize:8},pts[i].date)}),
+              // Line
+              e("path",{d:pathD,fill:"none",stroke:"#a1a1aa",strokeWidth:1.5}),
+              // Dots colored by zone
+              pts.map(function(p,i){return e("circle",{key:i,cx:p.x,cy:p.y,r:4,fill:p.c})}),
+            ),
+            e("div",{style:{display:"flex",justifyContent:"center",gap:12,marginTop:6}},
+              RIR_OPTIONS.filter(function(o){return o.value!==3}).map(function(o){return e("span",{key:o.value,style:{fontSize:10,color:"#71717a",display:"flex",alignItems:"center",gap:3}},
+                e("span",{style:{width:8,height:8,borderRadius:"50%",background:o.color,display:"inline-block"}}),o.short)}),
+            ),
+          );
+        })(),
+      ),
       // Exercise progress
       e("div", { className: "card" },
         e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
@@ -1298,18 +1351,31 @@
             allEx.map(n => e("option", { key: n, value: n }, n)),
           ),
         ),
-        selEx ? e(MiniLineChart, { data: exTrend, dataKey: "maxWeight", color: "#f97316", width: 340, height: 160, label: "Max Weight" }) :
+        selEx ? e(React.Fragment, null,
+          e(MiniLineChart, { data: exTrend, dataKey: "maxWeight", color: "#f97316", width: 340, height: 160, label: "Max Weight (" + state.weightUnit + ")" }),
+          exTrend.some(function(p){return p.strengthScore>0}) && e("div", { style: { marginTop: 12, borderTop: "1px solid #3f3f46", paddingTop: 12 } },
+            e(MiniLineChart, { data: exTrend, dataKey: "strengthScore", color: "#22d3ee", width: 340, height: 160, label: "Strength Score (est. 1RM)" }),
+          ),
+          exTrend.length >= 2 && e("div", { style: { marginTop: 12, borderTop: "1px solid #3f3f46", paddingTop: 12 } },
+            e("div", { style: { fontSize: 11, color: "#71717a", marginBottom: 4 } }, "Avg Intensity (RIR)"),
+            e("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } },
+              exTrend.map(function(p,i){var c=p.avgRir<=0.5?"#ef4444":p.avgRir<=1.5?"#fb923c":"#facc15";return e("div",{key:i,style:{display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
+                e("div",{style:{width:20,height:20,borderRadius:4,background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#000"}},p.avgRir<=0.5?"F":p.avgRir<=1.5?"M":"L"),
+                e("div",{style:{fontSize:7,color:"#52525b"}},p.date),
+              )}),
+            ),
+          ),
+        ) :
           e("p", { style: { color: "#52525b", fontSize: 13, textAlign: "center", padding: "24px 0" } }, "Select an exercise to see trends"),
       ),
       // PRs
       prs.length > 0 && e("div", { className: "card" },
-        e("div", { className: "label" }, "Personal Records"),
+        e("div", { className: "label" }, "Personal Records (by Strength Score)"),
         prs.slice(0, 10).map(([name, pr]) => e("div", { key: name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(63,63,70,0.5)", borderRadius: 8, padding: "8px 12px", marginBottom: 6 } },
           e("span", { style: { fontSize: 13, color: "#e4e4e7" } }, name),
           e("div", { style: { textAlign: "right" } },
-            e("span", { style: { fontSize: 13, fontWeight: 600, color: "#f97316" } }, pr.weight + " " + state.weightUnit),
-            e("span", { style: { fontSize: 11, color: "#71717a", marginLeft: 4 } }, "× " + pr.reps),
-            e("div", { style: { fontSize: 11, color: "#52525b" } }, pr.date),
+            e("div", { style: { fontSize: 14, fontWeight: 700, color: "#22d3ee" } }, pr.e1rm + " " + state.weightUnit),
+            e("div", { style: { fontSize: 11, color: "#71717a" } }, pr.weight + " × " + pr.reps + " · " + pr.date),
           ),
         )),
       ),
@@ -1403,7 +1469,7 @@
             ["1.", "Create workouts", "Define exercises, sets, and reps in the Workouts tab. Choose from 200+ exercises across 12 muscle groups."],
             ["2.", "Set your schedule", "Use Weekly mode to assign workouts to specific days, or Split mode to rotate through a cycle."],
             ["3.", "Track daily", "Open the app, start today\u2019s workout, and log reps, weight, and RIR (Reps in Reserve) per set. Mark warmup sets separately."],
-            ["4.", "Review progress", "Check the Stats tab for trends in volume and weight over time. Warmup sets are excluded from analytics."],
+            ["4.", "Review progress", "Check the Stats tab for trends in volume, weight, and Strength Score over time. Warmup sets are excluded from analytics."],
           ].map(function(item) {
             return e("div", { key: item[0], style: { display: "flex", gap: 10 } },
               e("div", { style: { fontSize: 13, fontWeight: 700, color: "#f97316", minWidth: 20 } }, item[0]),
@@ -1413,6 +1479,13 @@
               ),
             );
           }),
+          e("div", { style: { borderTop: "1px solid #3f3f46", paddingTop: 12, marginTop: 4, display: "flex", gap: 10 } },
+            e("div", { style: { fontSize: 13, fontWeight: 700, color: "#22d3ee", minWidth: 20 } }, "\u2139"),
+            e("div", null,
+              e("div", { style: { fontSize: 13, fontWeight: 500, color: "#22d3ee" } }, "Strength Score"),
+              e("div", { style: { fontSize: 11, color: "#71717a", lineHeight: 1.4, marginTop: 2 } }, "Your estimated one-rep max (e1RM) using the Epley formula: weight \u00D7 (1 + reps\u202F/\u202F30). It turns any set into a single strength number so you can track progress across different rep ranges. Most accurate for compound lifts in the 1\u201310 rep range \u2014 the trend matters more than the exact number."),
+            ),
+          ),
         ),
       ),
       // ── Privacy & Security ──
