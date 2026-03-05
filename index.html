@@ -1594,16 +1594,18 @@
     // ── 1. On mount: restore session if user was active (signed in or mid-workout)
     //    Only explicit sign-out clears the session flag → sends to login.
     useEffect(() => {
-      const hadSession = localStorage.getItem("workit_session") === "active";
-      const cached = loadLocal();
       var target = "login";
-      if (hadSession && cached) {
-        const { trackingSession, ...data } = cached;
-        dispatch({type:"LOAD_FROM_SHEETS", data});
-        if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
-        prevState.current = { ...makeInitialState(), ...data };
-        target = "offline";
-      }
+      try {
+        const hadSession = localStorage.getItem("workit_session") === "active";
+        const cached = loadLocal();
+        if (hadSession && cached) {
+          const { trackingSession, ...data } = cached;
+          dispatch({type:"LOAD_FROM_SHEETS", data});
+          if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
+          prevState.current = { ...makeInitialState(), ...data };
+          target = "offline";
+        }
+      } catch(ex) { console.warn("Session restore failed:", ex); }
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
@@ -1629,28 +1631,9 @@
       finally{ setSyncing(false); }
     }, []);
 
-    // ── 4a. Auto-reconnect when data changes while offline (save workout, log weight)
-    const prevHistory = useRef(state.history.length);
-    const prevWeightLog = useRef(state.weightLog.length);
-    useEffect(() => {
-      const historyGrew = state.history.length > prevHistory.current;
-      const weightGrew = state.weightLog.length > prevWeightLog.current;
-      prevHistory.current = state.history.length;
-      prevWeightLog.current = state.weightLog.length;
-      if ((historyGrew || weightGrew) && authState === "offline") {
-        // Data was saved while offline — trigger sign-in to sync
-        try {
-          const client = google.accounts.oauth2.initTokenClient({
-            client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
-            callback: async (resp) => {
-              if (resp.error) return;
-              await connectSheets(resp.access_token);
-            },
-          });
-          client.requestAccessToken();
-        } catch(ex) { /* stay offline, data is safe in localStorage */ }
-      }
-    }, [state.history.length, state.weightLog.length, authState, connectSheets]);
+    // ── 4a. Refs for auto-reconnect (effect is after connectSheets below)
+    const prevHistory = useRef(null);
+    const prevWeightLog = useRef(null);
 
     // ── 4b. Debounced sync on state changes (only when authenticated)
     useEffect(() => {
@@ -1686,6 +1669,24 @@
         try{localStorage.setItem("workit_session","active")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, []);
+
+    // ── 5a. Auto-reconnect when data changes while offline (save workout, log weight)
+    useEffect(() => {
+      if (prevHistory.current === null) { prevHistory.current = state.history.length; prevWeightLog.current = state.weightLog.length; return; }
+      var historyGrew = state.history.length > prevHistory.current;
+      var weightGrew = state.weightLog.length > prevWeightLog.current;
+      prevHistory.current = state.history.length;
+      prevWeightLog.current = state.weightLog.length;
+      if ((historyGrew || weightGrew) && authState === "offline" && typeof google !== "undefined" && google.accounts) {
+        try {
+          var client = google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
+            callback: async function(resp) { if (!resp.error) await connectSheets(resp.access_token); },
+          });
+          client.requestAccessToken();
+        } catch(ex) { /* stay offline, data is safe in localStorage */ }
+      }
+    }, [state.history.length, state.weightLog.length, authState, connectSheets]);
 
     // ── 6. Manual login (first time or re-auth)
     const handleLogin = useCallback(async (token) => {
