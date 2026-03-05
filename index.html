@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.4.2";
+  const APP_VERSION = "2.4.3";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1213,7 +1213,7 @@
             : e("p", { style: { fontSize: 12, color: "#52525b" } }, "No alternatives defined."),
         ),
         // Header row
-        e("div", { style: { display: "grid", gridTemplateColumns: "24px 1fr 60px auto 24px", gap: 4, marginBottom: 4 } },
+        e("div", { style: { display: "grid", gridTemplateColumns: "24px 1fr 56px 110px 24px", gap: 4, marginBottom: 4 } },
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
           e("div", { style: { fontSize: 10, color: "#71717a" } }, state.weightUnit),
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "Reps"),
@@ -1223,7 +1223,7 @@
         ex.sets.map((set, si) => {
           const rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToRir(set.effort) : 2);
           const isWarmup = set.warmup || rir === 3;
-          return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "24px 1fr 60px auto 24px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
+          return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "24px 1fr 56px 110px 24px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
             e("div", { style: { fontSize: 12, color: "#71717a" } }, si+1),
             e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
             e("input", { name: "setReps", type: "number", min: 0, value: set.reps, onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
