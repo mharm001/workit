@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Workout Tracker</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <style>
+    :root { --bg: #18181b; --card: #27272a; --border: #3f3f46; --muted: #a1a1aa; --accent: #f97316; }
+    body { background: var(--bg); margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #fff; }
+    * { box-sizing: border-box; }
+    .bg-card { background: var(--card); }
+    .bg-darker { background: #1f1f23; }
+    .text-muted { color: var(--muted); }
+    .text-accent { color: var(--accent); }
+    .bg-accent { background: var(--accent); }
+    .border-dark { border-color: var(--border); }
+    .btn { padding: 10px 16px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; font-size: 14px; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-green { background: #16a34a; color: #fff; }
+    .btn-blue { background: #2563eb; color: #fff; }
+    .btn-dark { background: #3f3f46; color: #d4d4d8; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px dashed var(--border); }
+    .input { background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: #fff; font-size: 14px; outline: none; width: 100%; }
+    .input:focus { border-color: var(--accent); }
+    .input-sm { padding: 6px 8px; font-size: 12px; text-align: center; width: 60px; }
+    .card { background: var(--card); border-radius: 12px; padding: 16px; }
+    .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 8px; }
+    .pill { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+    .spinner { border: 3px solid #3f3f46; border-top: 3px solid var(--accent); border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 50; }
+    .tab { flex: 1; padding: 10px 0 8px; text-align: center; font-size: 11px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(249,115,22,0.05); }
+    .tab-icon { font-size: 16px; display: block; margin-bottom: 2px; }
+    .grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .effort-bar { display: flex; align-items: center; gap: 6px; }
+    .effort-bar input[type=range] { flex: 1; -webkit-appearance: none; background: #3f3f46; border-radius: 4px; height: 6px; outline: none; }
+    .effort-bar input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+    select { background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; padding: 8px 32px 8px 12px; color: #fff; font-size: 14px; outline: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 8px center; background-repeat: no-repeat; background-size: 1.2em; }
+    select:focus { border-color: var(--accent); }
+    .flex-center { display: flex; align-items: center; justify-content: center; }
+    .set-grid { display: grid; grid-template-columns: 24px 1fr 70px 1fr 24px; gap: 4px; align-items: center; }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .user-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid #1f1f23; }
+    .user-bar img { width: 24px; height: 24px; border-radius: 50%; }
+    .google-btn { display: flex; align-items: center; justify-content: center; gap: 12px; background: #fff; color: #333; font-weight: 500; padding: 12px; border-radius: 8px; border: none; cursor: pointer; width: 100%; font-size: 15px; }
+    .google-btn:hover { background: #f3f4f6; }
+    .stat-box { background: var(--card); border-radius: 8px; padding: 12px; text-align: center; }
+    .stat-num { font-size: 24px; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 11px; color: var(--muted); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+(function() {
+  "use strict";
+  const e = React.createElement;
+  const { useState, useReducer, useRef, useCallback, useMemo, useEffect } = React;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════════════
+  const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
+  const SCOPES = "https://www.googleapis.com/auth/drive.file";
+  const SPREADSHEET_NAME = "Workout Tracker Data";
+  const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+  const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
+
+  // ─── Exercise Library ──────────────────────────────────────────
+  const EXERCISE_LIBRARY = {
+    chest: [
+      { name: "Bench Press", defaultSets: 4, defaultReps: 8 },
+      { name: "Incline Dumbbell Press", defaultSets: 3, defaultReps: 10 },
+      { name: "Cable Flyes", defaultSets: 3, defaultReps: 12 },
+      { name: "Dips (Chest)", defaultSets: 3, defaultReps: 10 },
+      { name: "Push-Ups", defaultSets: 3, defaultReps: 15 },
+      { name: "Dumbbell Flyes", defaultSets: 3, defaultReps: 12 },
+      { name: "Machine Chest Press", defaultSets: 3, defaultReps: 10 },
+      { name: "Decline Bench Press", defaultSets: 3, defaultReps: 8 },
+    ],
+    back: [
+      { name: "Deadlift", defaultSets: 4, defaultReps: 5 },
+      { name: "Barbell Row", defaultSets: 4, defaultReps: 8 },
+      { name: "Pull-Ups", defaultSets: 3, defaultReps: 8 },
+      { name: "Lat Pulldown", defaultSets: 3, defaultReps: 10 },
+      { name: "Seated Cable Row", defaultSets: 3, defaultReps: 10 },
+      { name: "T-Bar Row", defaultSets: 3, defaultReps: 8 },
+      { name: "Face Pulls", defaultSets: 3, defaultReps: 15 },
+      { name: "Single Arm Dumbbell Row", defaultSets: 3, defaultReps: 10 },
+    ],
+    shoulders: [
+      { name: "Overhead Press", defaultSets: 4, defaultReps: 8 },
+      { name: "Lateral Raises", defaultSets: 3, defaultReps: 12 },
+      { name: "Front Raises", defaultSets: 3, defaultReps: 12 },
+      { name: "Rear Delt Flyes", defaultSets: 3, defaultReps: 12 },
+      { name: "Arnold Press", defaultSets: 3, defaultReps: 10 },
+      { name: "Upright Rows", defaultSets: 3, defaultReps: 10 },
+    ],
+    legs: [
+      { name: "Squat", defaultSets: 4, defaultReps: 8 },
+      { name: "Romanian Deadlift", defaultSets: 3, defaultReps: 10 },
+      { name: "Leg Press", defaultSets: 3, defaultReps: 10 },
+      { name: "Lunges", defaultSets: 3, defaultReps: 10 },
+      { name: "Leg Curl", defaultSets: 3, defaultReps: 12 },
+      { name: "Leg Extension", defaultSets: 3, defaultReps: 12 },
+      { name: "Calf Raises", defaultSets: 4, defaultReps: 15 },
+      { name: "Bulgarian Split Squat", defaultSets: 3, defaultReps: 10 },
+      { name: "Hip Thrust", defaultSets: 3, defaultReps: 10 },
+    ],
+    arms: [
+      { name: "Barbell Curl", defaultSets: 3, defaultReps: 10 },
+      { name: "Tricep Pushdown", defaultSets: 3, defaultReps: 12 },
+      { name: "Hammer Curls", defaultSets: 3, defaultReps: 10 },
+      { name: "Skull Crushers", defaultSets: 3, defaultReps: 10 },
+      { name: "Concentration Curls", defaultSets: 3, defaultReps: 12 },
+      { name: "Overhead Tricep Extension", defaultSets: 3, defaultReps: 10 },
+      { name: "Preacher Curls", defaultSets: 3, defaultReps: 10 },
+      { name: "Close-Grip Bench Press", defaultSets: 3, defaultReps: 8 },
+    ],
+    core: [
+      { name: "Plank", defaultSets: 3, defaultReps: 60 },
+      { name: "Hanging Leg Raise", defaultSets: 3, defaultReps: 12 },
+      { name: "Cable Crunch", defaultSets: 3, defaultReps: 15 },
+      { name: "Ab Wheel Rollout", defaultSets: 3, defaultReps: 10 },
+      { name: "Russian Twists", defaultSets: 3, defaultReps: 20 },
+      { name: "Bicycle Crunches", defaultSets: 3, defaultReps: 20 },
+    ],
+    push: [
+      { name: "Bench Press", defaultSets: 4, defaultReps: 8 },
+      { name: "Overhead Press", defaultSets: 4, defaultReps: 8 },
+      { name: "Incline Dumbbell Press", defaultSets: 3, defaultReps: 10 },
+      { name: "Lateral Raises", defaultSets: 3, defaultReps: 12 },
+      { name: "Tricep Pushdown", defaultSets: 3, defaultReps: 12 },
+      { name: "Dips (Chest)", defaultSets: 3, defaultReps: 10 },
+    ],
+    pull: [
+      { name: "Deadlift", defaultSets: 4, defaultReps: 5 },
+      { name: "Barbell Row", defaultSets: 4, defaultReps: 8 },
+      { name: "Pull-Ups", defaultSets: 3, defaultReps: 8 },
+      { name: "Face Pulls", defaultSets: 3, defaultReps: 15 },
+      { name: "Barbell Curl", defaultSets: 3, defaultReps: 10 },
+      { name: "Hammer Curls", defaultSets: 3, defaultReps: 10 },
+    ],
+  };
+
+  // ─── Helpers ────────────────────────────────────────────────────
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+  const DAY_LABELS = {monday:"Mon",tuesday:"Tue",wednesday:"Wed",thursday:"Thu",friday:"Fri",saturday:"Sat",sunday:"Sun"};
+  const todayDay = () => DAYS[new Date().getDay()===0?6:new Date().getDay()-1];
+  const toDateStr = (d) => d.toISOString().split("T")[0];
+  const effortColor = (v) => v<=3?"#4ade80":v<=6?"#facc15":v<=8?"#fb923c":"#ef4444";
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SHEETS SERVICE
+  // ═══════════════════════════════════════════════════════════════════
+  const sheetsService = {
+    accessToken: null,
+    spreadsheetId: null,
+
+    async _fetch(url, options) {
+      options = options || {};
+      const res = await fetch(url, { ...options, headers: { "Authorization": "Bearer " + this.accessToken, "Content-Type": "application/json", ...(options.headers||{}) } });
+      if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error((err.error||{}).message || "API error " + res.status); }
+      return res.json();
+    },
+
+    async findSpreadsheet() {
+      const q = encodeURIComponent("name='" + SPREADSHEET_NAME + "' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false");
+      const data = await this._fetch(DRIVE_API + "?q=" + q + "&spaces=drive&fields=files(id,name)");
+      return (data.files||[])[0] ? data.files[0].id : null;
+    },
+
+    async createSpreadsheet() {
+      const data = await this._fetch(SHEETS_API, { method: "POST", body: JSON.stringify({
+        properties: { title: SPREADSHEET_NAME },
+        sheets: [{properties:{title:"config",index:0}},{properties:{title:"workouts",index:1}},{properties:{title:"history",index:2}},{properties:{title:"weight",index:3}}],
+      })});
+      this.spreadsheetId = data.spreadsheetId;
+      await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values:batchUpdate", { method:"POST", body: JSON.stringify({ valueInputOption:"RAW", data:[
+        {range:"config!A1:B1",values:[["key","value"]]},{range:"workouts!A1:B1",values:[["id","json"]]},{range:"history!A1:B1",values:[["date","json"]]},{range:"weight!A1:B1",values:[["date","weight"]]}
+      ]})});
+      return this.spreadsheetId;
+    },
+
+    async _getValues(range) {
+      const d = await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values/"+encodeURIComponent(range));
+      return d.values || [];
+    },
+
+    async _clearAndWrite(range, values) {
+      await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values/"+encodeURIComponent(range)+":clear",{method:"POST",body:"{}"});
+      if (values.length > 0) await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values/"+encodeURIComponent(range)+"?valueInputOption=RAW",{method:"PUT",body:JSON.stringify({range,values})});
+    },
+
+    async loadAll() {
+      const [configRows, workoutRows, historyRows, weightRows] = await Promise.all([
+        this._getValues("config!A2:B100"), this._getValues("workouts!A2:B1000"), this._getValues("history!A2:B10000"), this._getValues("weight!A2:B1000")
+      ]);
+      const config = {};
+      configRows.forEach(function(r){ try{config[r[0]]=JSON.parse(r[1])}catch(e){config[r[0]]=r[1]} });
+      const workouts = {};
+      workoutRows.forEach(function(r){ try{workouts[r[0]]=JSON.parse(r[1])}catch(e){} });
+      const history = historyRows.map(function(r){ try{return JSON.parse(r[1])}catch(e){return null} }).filter(Boolean);
+      const weightLog = weightRows.map(function(r){ return {date:r[0],weight:parseFloat(r[1])} }).filter(function(w){return !isNaN(w.weight)});
+      return {
+        scheduleType: config.scheduleType || "weekly",
+        weeklySchedule: config.weeklySchedule || DAYS.map(function(d){return{day:d,workoutId:null}}),
+        cadenceSchedule: config.cadenceSchedule || {restMode:"manual",autoRestEvery:3,rotation:[],currentIndex:0},
+        workouts: workouts, history: history, weightLog: weightLog,
+      };
+    },
+
+    async saveAll(state) {
+      const configVals = [["key","value"],["scheduleType",JSON.stringify(state.scheduleType)],["weeklySchedule",JSON.stringify(state.weeklySchedule)],["cadenceSchedule",JSON.stringify(state.cadenceSchedule)]];
+      const workoutVals = [["id","json"]].concat(Object.entries(state.workouts).map(function(e){return[e[0],JSON.stringify(e[1])]}));
+      const historyVals = [["date","json"]].concat(state.history.map(function(h){return[h.date,JSON.stringify(h)]}));
+      const weightVals = [["date","weight"]].concat(state.weightLog.map(function(w){return[w.date,String(w.weight)]}));
+      await Promise.all([
+        this._clearAndWrite("config!A1:B100", configVals),
+        this._clearAndWrite("workouts!A1:B1000", workoutVals),
+        this._clearAndWrite("history!A1:B10000", historyVals),
+        this._clearAndWrite("weight!A1:B1000", weightVals),
+      ]);
+    },
+  };
+
+  // ─── State ──────────────────────────────────────────────────────
+  const makeInitialState = () => ({
+    scheduleType: "weekly",
+    weeklySchedule: DAYS.map(d => ({ day: d, workoutId: null })),
+    cadenceSchedule: { restMode: "manual", autoRestEvery: 3, rotation: [], currentIndex: 0 },
+    workouts: {}, history: [], weightLog: [],
+    activeView: "dashboard", trackingSession: null,
+  });
+
+  function reducer(state, action) {
+    switch (action.type) {
+      case "SET_VIEW": return { ...state, activeView: action.view };
+      case "SET_SCHEDULE_TYPE": return { ...state, scheduleType: action.scheduleType };
+      case "SET_WEEKLY_SCHEDULE": return { ...state, weeklySchedule: action.schedule };
+      case "SET_CADENCE_SCHEDULE": return { ...state, cadenceSchedule: { ...state.cadenceSchedule, ...action.data } };
+      case "UPSERT_WORKOUT": { const id = action.workout.id || uid(); return { ...state, workouts: { ...state.workouts, [id]: { ...action.workout, id } } }; }
+      case "DELETE_WORKOUT": {
+        const w = { ...state.workouts }; delete w[action.id];
+        return { ...state, workouts: w,
+          weeklySchedule: state.weeklySchedule.map(d => d.workoutId === action.id ? { ...d, workoutId: null } : d),
+          cadenceSchedule: { ...state.cadenceSchedule, rotation: state.cadenceSchedule.rotation.filter(r => r.workoutId !== action.id) },
+        };
+      }
+      case "START_TRACKING": return { ...state, trackingSession: action.session, activeView: "tracking" };
+      case "UPDATE_TRACKING": return { ...state, trackingSession: { ...state.trackingSession, ...action.data } };
+      case "SAVE_WORKOUT": {
+        const s = state.trackingSession;
+        const entry = { date: toDateStr(new Date()), workoutId: s.workoutId, workoutName: (state.workouts[s.workoutId]||{}).name||"Unknown", wasOverride: s.wasOverride||false, exercises: s.exercises };
+        let cad = state.cadenceSchedule;
+        if (state.scheduleType === "cadence" && cad.rotation.length > 0) cad = { ...cad, currentIndex: (cad.currentIndex + 1) % cad.rotation.length };
+        return { ...state, history: [...state.history, entry], cadenceSchedule: cad, trackingSession: null, activeView: "dashboard" };
+      }
+      case "CANCEL_TRACKING": return { ...state, trackingSession: null, activeView: "dashboard" };
+      case "OVERRIDE_TODAY": {
+        if (state.scheduleType === "weekly") {
+          const ti = state.weeklySchedule.findIndex(d => d.day === todayDay());
+          const oi = state.weeklySchedule.findIndex(d => d.workoutId === action.newWorkoutId);
+          if (ti >= 0 && oi >= 0) { const sc = [...state.weeklySchedule]; const tmp = sc[ti].workoutId; sc[ti]={...sc[ti],workoutId:action.newWorkoutId}; sc[oi]={...sc[oi],workoutId:tmp}; return{...state,weeklySchedule:sc}; }
+        } else {
+          const idx = state.cadenceSchedule.rotation.findIndex(r => r.workoutId === action.newWorkoutId);
+          if (idx >= 0) return { ...state, cadenceSchedule: { ...state.cadenceSchedule, currentIndex: idx } };
+        }
+        return state;
+      }
+      case "LOG_WEIGHT": return { ...state, weightLog: [...state.weightLog.filter(w => w.date !== action.date), { date: action.date, weight: action.weight }].sort((a,b)=>a.date.localeCompare(b.date)) };
+      case "LOAD_FROM_SHEETS": return { ...state, ...action.data };
+      case "IMPORT_STATE": return { ...action.state, activeView: "dashboard", trackingSession: null };
+      default: return state;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MINI CHART (SVG-based, no external dependency)
+  // ═══════════════════════════════════════════════════════════════════
+  function MiniLineChart({ data, dataKey, width, height, color, label }) {
+    if (!data || data.length < 2) return e("p", { style: { color: "#71717a", fontSize: 12, textAlign: "center", padding: "24px 0" } }, "Not enough data yet");
+    const vals = data.map(d => d[dataKey]);
+    const min = Math.min(...vals); const max = Math.max(...vals);
+    const range = max - min || 1;
+    const w = width || 320; const h = height || 150;
+    const pad = 40;
+    const points = data.map((d, i) => {
+      const x = pad + (i / (data.length - 1)) * (w - pad * 2);
+      const y = h - pad - ((d[dataKey] - min) / range) * (h - pad * 2);
+      return { x, y, ...d };
+    });
+    const pathD = points.map((p, i) => (i === 0 ? "M" : "L") + p.x + "," + p.y).join(" ");
+    return e("div", { style: { overflowX: "auto" } },
+      e("svg", { width: w, height: h, viewBox: "0 0 " + w + " " + h, style: { display: "block", margin: "0 auto" } },
+        // Grid lines
+        [0, 0.25, 0.5, 0.75, 1].map((f, i) => {
+          const y = h - pad - f * (h - pad * 2);
+          const val = (min + f * range).toFixed(0);
+          return e("g", { key: i },
+            e("line", { x1: pad, y1: y, x2: w - pad, y2: y, stroke: "#3f3f46", strokeDasharray: "3,3" }),
+            e("text", { x: pad - 4, y: y + 4, textAnchor: "end", fill: "#71717a", fontSize: 9 }, val),
+          );
+        }),
+        // X labels
+        data.length <= 12 ? points.map((p, i) =>
+          e("text", { key: "x" + i, x: p.x, y: h - pad + 14, textAnchor: "middle", fill: "#71717a", fontSize: 9 }, p.date)
+        ) : [0, Math.floor(data.length/2), data.length-1].map(i =>
+          e("text", { key: "x" + i, x: points[i].x, y: h - pad + 14, textAnchor: "middle", fill: "#71717a", fontSize: 9 }, points[i].date)
+        ),
+        // Line
+        e("path", { d: pathD, fill: "none", stroke: color || "#f97316", strokeWidth: 2 }),
+        // Dots
+        points.map((p, i) => e("circle", { key: i, cx: p.x, cy: p.y, r: 3, fill: color || "#f97316" })),
+        // Label
+        label && e("text", { x: w/2, y: 12, textAnchor: "middle", fill: "#a1a1aa", fontSize: 10 }, label),
+      )
+    );
+  }
+
+  function MiniBarChart({ data, dataKey, width, height, color, label }) {
+    if (!data || data.length === 0) return e("p", { style: { color: "#71717a", fontSize: 12, textAlign: "center", padding: "24px 0" } }, "No data");
+    const vals = data.map(d => d[dataKey]);
+    const max = Math.max(...vals) || 1;
+    const w = width || 320; const h = height || 150;
+    const pad = 40;
+    const barW = Math.max(8, Math.min(24, (w - pad * 2) / data.length - 2));
+    return e("div", { style: { overflowX: "auto" } },
+      e("svg", { width: w, height: h, viewBox: "0 0 " + w + " " + h, style: { display: "block", margin: "0 auto" } },
+        // Y axis labels
+        [0, 0.5, 1].map((f, i) => {
+          const y = h - pad - f * (h - pad * 2);
+          return e("g", { key: i },
+            e("line", { x1: pad, y1: y, x2: w - pad, y2: y, stroke: "#3f3f46", strokeDasharray: "3,3" }),
+            e("text", { x: pad - 4, y: y + 4, textAnchor: "end", fill: "#71717a", fontSize: 9 }, (f * max).toFixed(0)),
+          );
+        }),
+        // Bars
+        data.map((d, i) => {
+          const barH = (d[dataKey] / max) * (h - pad * 2);
+          const x = pad + (i / data.length) * (w - pad * 2) + (w - pad * 2) / data.length / 2 - barW / 2;
+          const y = h - pad - barH;
+          return e("g", { key: i },
+            e("rect", { x: x, y: y, width: barW, height: barH, fill: color || "#f97316", rx: 3 }),
+            data.length <= 12 && e("text", { x: x + barW / 2, y: h - pad + 14, textAnchor: "middle", fill: "#71717a", fontSize: 8 }, d.date),
+          );
+        }),
+        label && e("text", { x: w / 2, y: 12, textAnchor: "middle", fill: "#a1a1aa", fontSize: 10 }, label),
+      )
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LOGIN SCREEN
+  // ═══════════════════════════════════════════════════════════════════
+  function LoginScreen({ onLogin }) {
+    const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const handleLogin = () => {
+      setLoading(true); setError(null);
+      try {
+        const client = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
+          callback: (resp) => { if (resp.error) { setError(resp.error_description || resp.error); setLoading(false); return; } onLogin(resp.access_token); },
+        });
+        client.requestAccessToken();
+      } catch(ex) { setError(ex.message); setLoading(false); }
+    };
+    return e("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } },
+      e("div", { style: { maxWidth: 380, width: "100%", textAlign: "center" } },
+        e("div", { style: { fontSize: 48, marginBottom: 8 } }, "🏋️"),
+        e("h1", { style: { fontSize: 28, fontWeight: 700, color: "#fff", margin: "0 0 4px" } }, "Workout Tracker"),
+        e("p", { className: "text-muted", style: { fontSize: 14, marginBottom: 24 } }, "Track your progress. Beat your records."),
+        e("div", { className: "card", style: { padding: 24 } },
+          e("p", { style: { color: "#d4d4d8", fontSize: 14, marginBottom: 16 } }, "Sign in with Google to sync your workout data to a private Google Sheet."),
+          e("div", { style: { background: "#3f3f46", borderRadius: 8, padding: 12, textAlign: "left", marginBottom: 16 } },
+            e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 4 } }, "Privacy"),
+            e("p", { style: { fontSize: 12, color: "#d4d4d8", margin: 0 } }, "Uses ", e("span", { style: { color: "#f97316", fontFamily: "monospace" } }, "drive.file"), " scope — can ", e("strong", null, "only"), " access the single spreadsheet it creates."),
+          ),
+          e("button", { className: "google-btn", onClick: handleLogin, disabled: loading },
+            loading ? e("div", { className: "spinner", style: { width: 20, height: 20, borderWidth: 2 } }) :
+            [e("svg", { key: "g", width: 18, height: 18, viewBox: "0 0 48 48" },
+              e("path", { fill: "#EA4335", d: "M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" }),
+              e("path", { fill: "#4285F4", d: "M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" }),
+              e("path", { fill: "#FBBC05", d: "M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" }),
+              e("path", { fill: "#34A853", d: "M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" }),
+            ), " Sign in with Google"]
+          ),
+          error && e("div", { style: { background: "rgba(127,29,29,0.5)", border: "1px solid #991b1b", borderRadius: 8, padding: 12, marginTop: 12, fontSize: 13, color: "#fca5a5" } }, error),
+        ),
+        e("p", { style: { color: "#52525b", fontSize: 12, marginTop: 16 } }, "Your data lives in a Google Sheet you own."),
+      )
+    );
+  }
+
+  function LoadingScreen({ message }) {
+    return e("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" } },
+      e("div", { style: { textAlign: "center" } },
+        e("div", { className: "spinner", style: { width: 40, height: 40, borderWidth: 4, margin: "0 auto 16px" } }),
+        e("p", { className: "text-muted", style: { fontSize: 14 } }, message || "Loading..."),
+      )
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // NAV
+  // ═══════════════════════════════════════════════════════════════════
+  function NavBar({ activeView, dispatch, user, onSignOut, syncing }) {
+    const tabs = [{id:"dashboard",label:"Home",icon:"🏠"},{id:"schedule",label:"Schedule",icon:"📅"},{id:"workouts",label:"Workouts",icon:"💪"},{id:"analytics",label:"Stats",icon:"📊"},{id:"settings",label:"Data",icon:"⚙️"}];
+    return e("div", { style: { position: "sticky", top: 0, zIndex: 50 } },
+      e("div", { className: "user-bar" },
+        e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+          user && user.picture && e("img", { src: user.picture, alt: "" }),
+          e("span", { style: { fontSize: 12, color: "#a1a1aa" } }, (user && (user.name || user.email)) || ""),
+          syncing && e("div", { className: "spinner", style: { width: 12, height: 12, borderWidth: 2 } }),
+        ),
+        e("button", { onClick: onSignOut, style: { background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer" } }, "Sign out"),
+      ),
+      e("div", { className: "tab-bar" },
+        tabs.map(t => e("button", { key: t.id, className: "tab" + (activeView === t.id ? " active" : ""), onClick: () => dispatch({type:"SET_VIEW",view:t.id}) },
+          e("span", { className: "tab-icon" }, t.icon), t.label
+        ))
+      )
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DASHBOARD
+  // ═══════════════════════════════════════════════════════════════════
+  function Dashboard({ state, dispatch }) {
+    const [weightInput, setWeightInput] = useState("");
+    const [showOverride, setShowOverride] = useState(false);
+    const workoutList = Object.values(state.workouts);
+    const todayStr = toDateStr(new Date());
+    const alreadyTracked = state.history.some(h => h.date === todayStr);
+    const lastWorkout = state.history.length > 0 ? state.history[state.history.length - 1] : null;
+    const latestWeight = state.weightLog.length > 0 ? state.weightLog[state.weightLog.length - 1] : null;
+
+    const getTodaysWorkout = () => {
+      if (state.scheduleType === "weekly") { const slot = state.weeklySchedule.find(d => d.day === todayDay()); return slot ? slot.workoutId : null; }
+      const rot = state.cadenceSchedule.rotation; if (rot.length === 0) return null;
+      const slot = rot[state.cadenceSchedule.currentIndex % rot.length]; return slot ? slot.workoutId : null;
+    };
+    const todayWId = getTodaysWorkout();
+    const todayW = todayWId ? state.workouts[todayWId] : null;
+
+    const streak = useMemo(() => { let c=0; const d=new Date(); for(let i=0;i<365;i++){if(state.history.some(h=>h.date===toDateStr(d)))c++;else if(i>0)break;d.setDate(d.getDate()-1);}return c; }, [state.history]);
+
+    const startTracking = (wid, isOverride) => {
+      const w = state.workouts[wid]; if (!w) return;
+      if (isOverride) dispatch({type:"OVERRIDE_TODAY",newWorkoutId:wid});
+      dispatch({type:"START_TRACKING",session:{workoutId:wid,wasOverride:!!isOverride,exercises:w.exercises.map(ex=>({exerciseId:ex.id,name:ex.name,sets:Array.from({length:ex.sets},()=>({reps:ex.defaultReps,weight:0,effort:5}))}))}});
+      setShowOverride(false);
+    };
+    const logWeight = () => { const w=parseFloat(weightInput); if(!isNaN(w)&&w>0){dispatch({type:"LOG_WEIGHT",date:todayStr,weight:w});setWeightInput("");} };
+
+    return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
+      // Header
+      e("div", { style: { textAlign: "center" } },
+        e("h1", { style: { fontSize: 24, fontWeight: 700, margin: "0 0 4px" } }, "Workout Tracker"),
+        e("p", { className: "text-muted", style: { fontSize: 13, margin: 0 } }, new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})),
+      ),
+      // Stats
+      e("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
+        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, streak), e("div", { className: "stat-label" }, "Day Streak")),
+        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, state.history.length), e("div", { className: "stat-label" }, "Workouts")),
+        e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, latestWeight ? latestWeight.weight : "—"), e("div", { className: "stat-label" }, "Weight")),
+      ),
+      // Today's workout
+      e("div", { className: "card" },
+        todayW ? [
+          e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 } },
+            e("div", null,
+              e("div", { className: "label" }, "Today's Workout"),
+              e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayW.name),
+              e("div", { className: "text-muted", style: { fontSize: 12 } }, todayW.exercises.length + " exercises"),
+            ),
+            alreadyTracked && e("span", { className: "pill", style: { background: "rgba(22,101,52,0.5)", color: "#86efac" } }, "Done"),
+          ),
+          e("div", { key: "b", style: { display: "flex", gap: 8 } },
+            e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => startTracking(todayWId) }, alreadyTracked ? "Track Again" : "Track Workout"),
+            e("button", { className: "btn btn-dark", onClick: () => setShowOverride(!showOverride) }, "Override"),
+          ),
+          showOverride && e("div", { key: "o", style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 8 } },
+            e("div", { className: "text-muted", style: { fontSize: 12 } }, "Pick a different workout:"),
+            workoutList.filter(w => w.id !== todayWId).map(w =>
+              e("button", { key: w.id, className: "btn btn-dark", style: { textAlign: "left", width: "100%" }, onClick: () => startTracking(w.id, true) }, w.name + " (" + w.exercises.length + " exercises)")
+            ),
+          ),
+        ] : e("div", { style: { textAlign: "center", padding: "24px 0" } },
+          e("p", { className: "text-muted", style: { marginBottom: 12 } }, workoutList.length === 0 ? "No workouts created yet" : "Rest day"),
+          workoutList.length === 0
+            ? e("button", { className: "btn btn-accent", onClick: () => dispatch({type:"SET_VIEW",view:"workouts"}) }, "Create Your First Workout")
+            : [
+              e("button", { key: "o", className: "btn btn-dark", onClick: () => setShowOverride(!showOverride) }, "Track a Workout Anyway"),
+              showOverride && e("div", { key: "ol", style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 8 } },
+                workoutList.map(w => e("button", { key: w.id, className: "btn btn-dark", style: { width: "100%" }, onClick: () => startTracking(w.id, true) }, w.name))
+              ),
+            ]
+        ),
+      ),
+      // Weight log
+      e("div", { className: "card" },
+        e("div", { className: "label" }, "Log Body Weight"),
+        e("div", { style: { display: "flex", gap: 8 } },
+          e("input", { type: "number", step: "0.1", placeholder: "lbs", value: weightInput, onInput: ev => setWeightInput(ev.target.value), className: "input", style: { flex: 1 } }),
+          e("button", { className: "btn btn-accent", onClick: logWeight }, "Log"),
+        ),
+        state.weightLog.some(w => w.date === todayStr) && e("div", { style: { fontSize: 12, color: "#4ade80", marginTop: 8 } }, "Logged today: " + (state.weightLog.find(w => w.date === todayStr)||{}).weight + " lbs"),
+      ),
+      // Last workout
+      lastWorkout && e("div", { className: "card" },
+        e("div", { className: "label" }, "Last Workout"),
+        e("div", { style: { fontWeight: 500 } }, lastWorkout.workoutName),
+        e("div", { className: "text-muted", style: { fontSize: 12 } }, lastWorkout.date + " — " + lastWorkout.exercises.length + " exercises, " + lastWorkout.exercises.reduce((a,ex) => a + ex.sets.length, 0) + " sets"),
+      ),
+      // Week preview
+      state.scheduleType === "weekly" && e("div", { className: "card" },
+        e("div", { className: "label" }, "This Week"),
+        e("div", { className: "grid-7" },
+          state.weeklySchedule.map(slot => {
+            const isToday = slot.day === todayDay(); const w = slot.workoutId ? state.workouts[slot.workoutId] : null;
+            return e("div", { key: slot.day, style: { textAlign: "center", padding: 8, borderRadius: 8, fontSize: 11, background: isToday ? "rgba(249,115,22,0.15)" : "rgba(63,63,70,0.5)", border: isToday ? "1px solid rgba(249,115,22,0.4)" : "1px solid transparent" } },
+              e("div", { style: { fontWeight: 500, color: isToday ? "#f97316" : "#d4d4d8" } }, DAY_LABELS[slot.day]),
+              e("div", { style: { marginTop: 4, color: w ? "#e4e4e7" : "#52525b" } }, w ? w.name.slice(0,5) : "Rest"),
+            );
+          })
+        ),
+      ),
+      // Cadence preview
+      state.scheduleType === "cadence" && state.cadenceSchedule.rotation.length > 0 && e("div", { className: "card" },
+        e("div", { className: "label" }, "Rotation"),
+        e("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
+          state.cadenceSchedule.rotation.map((slot, i) => {
+            const cur = i === state.cadenceSchedule.currentIndex % state.cadenceSchedule.rotation.length;
+            const w = slot.workoutId ? state.workouts[slot.workoutId] : null;
+            return e("span", { key: i, className: "pill", style: { background: cur ? "#f97316" : w ? "#3f3f46" : "rgba(63,63,70,0.5)", color: cur ? "#fff" : w ? "#d4d4d8" : "#52525b" } }, w ? w.name : "Rest");
+          })
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SCHEDULE SETUP
+  // ═══════════════════════════════════════════════════════════════════
+  function ScheduleSetup({ state, dispatch }) {
+    const wl = Object.values(state.workouts);
+    const setSlot = (day, wid) => dispatch({type:"SET_WEEKLY_SCHEDULE",schedule:state.weeklySchedule.map(s=>s.day===day?{...s,workoutId:wid}:s)});
+    const addRot = wid => dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:[...state.cadenceSchedule.rotation,{workoutId:wid}]}});
+    const remRot = i => dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:state.cadenceSchedule.rotation.filter((_,idx)=>idx!==i)}});
+    const moveRot = (i,dir) => {const r=[...state.cadenceSchedule.rotation];const n=i+dir;if(n<0||n>=r.length)return;[r[i],r[n]]=[r[n],r[i]];dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:r}});};
+
+    if (wl.length === 0) return e("div", { className: "fade-in", style: { padding: 16 } },
+      e("h2", { style: { fontSize: 20, fontWeight: 700, marginBottom: 16 } }, "Schedule Setup"),
+      e("div", { className: "card", style: { textAlign: "center", padding: 32 } },
+        e("p", { className: "text-muted", style: { marginBottom: 12 } }, "Create some workouts first."),
+        e("button", { className: "btn btn-accent", onClick: () => dispatch({type:"SET_VIEW",view:"workouts"}) }, "Go to Workouts"),
+      ),
+    );
+
+    return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
+      e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Schedule Setup"),
+      // Toggle
+      e("div", { style: { display: "flex", background: "#27272a", borderRadius: 8, padding: 4 } },
+        ["weekly","cadence"].map(t => e("button", { key: t, style: { flex: 1, padding: "8px 0", borderRadius: 6, border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer", background: state.scheduleType===t?"#f97316":"transparent", color: state.scheduleType===t?"#fff":"#a1a1aa" }, onClick: () => dispatch({type:"SET_SCHEDULE_TYPE",scheduleType:t}) }, t === "weekly" ? "Weekly" : "Cadence / Rotation"))
+      ),
+      state.scheduleType === "weekly"
+        ? e("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+          e("p", { className: "text-muted", style: { fontSize: 13 } }, "Assign a workout to each day. Leave empty for rest."),
+          state.weeklySchedule.map(slot => e("div", { key: slot.day, style: { display: "flex", alignItems: "center", gap: 12, background: "#27272a", borderRadius: 8, padding: 12 } },
+            e("div", { style: { width: 40, fontSize: 14, fontWeight: 500, color: "#d4d4d8" } }, DAY_LABELS[slot.day]),
+            e("select", { value: slot.workoutId || "", onChange: ev => setSlot(slot.day, ev.target.value || null), style: { flex: 1 } },
+              e("option", { value: "" }, "Rest Day"),
+              wl.map(w => e("option", { key: w.id, value: w.id }, w.name)),
+            ),
+          )),
+        )
+        : e("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+          e("p", { className: "text-muted", style: { fontSize: 13 } }, "Build your rotation cycle."),
+          // Rest mode
+          e("div", { className: "card" },
+            e("div", { className: "label" }, "Rest Day Mode"),
+            e("div", { style: { display: "flex", gap: 8 } },
+              ["manual","auto"].map(m => e("button", { key: m, style: { flex: 1, padding: "8px 0", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer", background: state.cadenceSchedule.restMode===m?"#f97316":"#3f3f46", color: state.cadenceSchedule.restMode===m?"#fff":"#a1a1aa" }, onClick: () => dispatch({type:"SET_CADENCE_SCHEDULE",data:{restMode:m}}) }, m==="manual"?"Manual Placement":"Auto Every N Days"))
+            ),
+            state.cadenceSchedule.restMode === "auto" && e("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 12 } },
+              e("span", { style: { fontSize: 13, color: "#d4d4d8" } }, "Rest every"),
+              e("input", { type: "number", min: 1, max: 10, value: state.cadenceSchedule.autoRestEvery, onInput: ev => dispatch({type:"SET_CADENCE_SCHEDULE",data:{autoRestEvery:parseInt(ev.target.value)||3}}), className: "input input-sm" }),
+              e("span", { style: { fontSize: 13, color: "#d4d4d8" } }, "workout days"),
+            ),
+          ),
+          // Rotation
+          e("div", { className: "card" },
+            e("div", { className: "label" }, "Rotation Order"),
+            state.cadenceSchedule.rotation.length === 0 && e("p", { className: "text-muted", style: { fontSize: 13, marginBottom: 12 } }, "No items yet."),
+            e("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 } },
+              state.cadenceSchedule.rotation.map((slot, i) => {
+                const w = slot.workoutId ? state.workouts[slot.workoutId] : null;
+                return e("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, background: "#3f3f46", borderRadius: 8, padding: "8px 12px" } },
+                  e("span", { style: { fontSize: 11, color: "#71717a", width: 20 } }, i+1),
+                  e("span", { style: { flex: 1, fontSize: 14, color: w ? "#fff" : "#71717a" } }, w ? w.name : "Rest"),
+                  e("button", { onClick: () => moveRot(i,-1), style: { background: "none", border: "none", color: "#71717a", cursor: "pointer", fontSize: 12 } }, "▲"),
+                  e("button", { onClick: () => moveRot(i,1), style: { background: "none", border: "none", color: "#71717a", cursor: "pointer", fontSize: 12 } }, "▼"),
+                  e("button", { onClick: () => remRot(i), style: { background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 } }, "✕"),
+                );
+              })
+            ),
+            e("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
+              wl.map(w => e("button", { key: w.id, className: "btn btn-dark", style: { fontSize: 12, padding: "6px 12px" }, onClick: () => addRot(w.id) }, "+ "+w.name)),
+              state.cadenceSchedule.restMode === "manual" && e("button", { className: "btn btn-ghost", style: { fontSize: 12, padding: "6px 12px" }, onClick: () => addRot(null) }, "+ Rest"),
+            ),
+          ),
+        ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // WORKOUT BUILDER
+  // ═══════════════════════════════════════════════════════════════════
+  function WorkoutBuilder({ state, dispatch }) {
+    const [editing, setEditing] = useState(null);
+    const [name, setName] = useState("");
+    const [exercises, setExercises] = useState([]);
+    const [showLib, setShowLib] = useState(false);
+    const [libCat, setLibCat] = useState("chest");
+    const wl = Object.values(state.workouts);
+
+    const startNew = () => { setEditing("new"); setName(""); setExercises([]); };
+    const startEdit = w => { setEditing(w.id); setName(w.name); setExercises(w.exercises.map(x=>({...x}))); };
+    const addEx = ex => setExercises([...exercises, { id: uid(), name: ex.name, sets: ex.defaultSets, defaultReps: ex.defaultReps, alternatives: [] }]);
+    const addCustom = () => setExercises([...exercises, { id: uid(), name: "New Exercise", sets: 3, defaultReps: 10, alternatives: [] }]);
+    const updEx = (id, f, v) => setExercises(exercises.map(x => x.id===id ? {...x,[f]:v} : x));
+    const remEx = id => setExercises(exercises.filter(x => x.id!==id));
+    const moveEx = (i,d) => { const a=[...exercises];const n=i+d;if(n<0||n>=a.length)return;[a[i],a[n]]=[a[n],a[i]];setExercises(a); };
+    const addAlt = (id,n) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:[...x.alternatives,n]} : x));
+    const remAlt = (id,ai) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:x.alternatives.filter((_,i)=>i!==ai)} : x));
+    const save = () => { if(!name.trim())return; dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),exercises}}); setEditing(null); };
+    const del = id => { dispatch({type:"DELETE_WORKOUT",id}); if(editing===id)setEditing(null); };
+
+    if (editing !== null) {
+      return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+          e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, editing === "new" ? "New Workout" : "Edit Workout"),
+          e("button", { style: { background: "none", border: "none", color: "#a1a1aa", cursor: "pointer", fontSize: 13 }, onClick: () => setEditing(null) }, "Cancel"),
+        ),
+        e("input", { type: "text", placeholder: "Workout name", value: name, onInput: ev => setName(ev.target.value), className: "input", style: { padding: 12, fontSize: 16 } }),
+        e("div", { className: "label" }, "Exercises"),
+        exercises.map((ex, idx) => e("div", { key: ex.id, className: "card", style: { display: "flex", flexDirection: "column", gap: 12 } },
+          e("div", { style: { display: "flex", gap: 8, alignItems: "start" } },
+            e("div", { style: { display: "flex", flexDirection: "column", gap: 4, paddingTop: 4 } },
+              e("button", { onClick: ()=>moveEx(idx,-1), style: { background:"none",border:"none",color:"#71717a",cursor:"pointer",fontSize:11 } }, "▲"),
+              e("button", { onClick: ()=>moveEx(idx,1), style: { background:"none",border:"none",color:"#71717a",cursor:"pointer",fontSize:11 } }, "▼"),
+            ),
+            e("div", { style: { flex: 1, display: "flex", flexDirection: "column", gap: 8 } },
+              e("input", { type: "text", value: ex.name, onInput: ev => updEx(ex.id,"name",ev.target.value), className: "input", style: { fontSize: 13 } }),
+              e("div", { style: { display: "flex", gap: 12 } },
+                e("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, e("span", { style:{fontSize:11,color:"#a1a1aa"} }, "Sets:"), e("input", { type:"number",min:1,value:ex.sets,onInput:ev=>updEx(ex.id,"sets",parseInt(ev.target.value)||1),className:"input input-sm" })),
+                e("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, e("span", { style:{fontSize:11,color:"#a1a1aa"} }, "Reps:"), e("input", { type:"number",min:1,value:ex.defaultReps,onInput:ev=>updEx(ex.id,"defaultReps",parseInt(ev.target.value)||1),className:"input input-sm" })),
+              ),
+              e("div", null,
+                e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 4 } }, "Alternatives" + (ex.alternatives.length > 0 ? " (" + ex.alternatives.length + ")" : "")),
+                e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
+                  ex.alternatives.map((alt, ai) => e("span", { key: ai, style: { background: "#3f3f46", color: "#d4d4d8", fontSize: 11, padding: "4px 8px", borderRadius: 9999, display: "inline-flex", alignItems: "center", gap: 4 } },
+                    alt, e("button", { onClick: () => remAlt(ex.id, ai), style: { background:"none",border:"none",color:"#71717a",cursor:"pointer",fontSize:11 } }, "×"),
+                  ))
+                ),
+                e("select", { value: "", onChange: ev => { if(ev.target.value){addAlt(ex.id,ev.target.value);ev.target.value="";} }, style: { width: "100%", fontSize: 12 } },
+                  e("option", { value: "" }, "Add alternative..."),
+                  Object.entries(EXERCISE_LIBRARY).flatMap(([cat,exs]) => exs.filter(l => l.name!==ex.name && !ex.alternatives.includes(l.name)).map(l => e("option", { key: cat+"-"+l.name, value: l.name }, l.name + " (" + cat + ")")))
+                ),
+              ),
+            ),
+            e("button", { onClick: () => remEx(ex.id), style: { background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,paddingTop:4 } }, "✕"),
+          ),
+        )),
+        e("button", { className: "btn btn-ghost", style: { width: "100%" }, onClick: () => setShowLib(!showLib) }, "+ Add from Library"),
+        e("button", { className: "btn btn-ghost", style: { width: "100%", marginTop: 8 }, onClick: addCustom }, "+ Add Custom Exercise"),
+        showLib && e("div", { className: "card" },
+          e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 } },
+            Object.keys(EXERCISE_LIBRARY).map(cat => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: libCat===cat?"#f97316":"#3f3f46", color: libCat===cat?"#fff":"#a1a1aa" }, onClick: () => setLibCat(cat) }, cat))
+          ),
+          e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
+            (EXERCISE_LIBRARY[libCat]||[]).map(ex => e("button", { key: ex.name, style: { textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onMouseOver: function(ev){ev.target.style.background="#3f3f46"}, onMouseOut: function(ev){ev.target.style.background="transparent"}, onClick: () => addEx(ex) },
+              ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"×"+ex.defaultReps),
+            ))
+          ),
+        ),
+        e("button", { className: "btn btn-accent", style: { width: "100%", padding: 14, marginTop: 8 }, onClick: save, disabled: !name.trim() }, "Save Workout"),
+      );
+    }
+
+    return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
+      e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, "Workouts"),
+        e("button", { className: "btn btn-accent", style: { fontSize: 13, padding: "8px 16px" }, onClick: startNew }, "+ New"),
+      ),
+      wl.length === 0 && e("div", { className: "card", style: { textAlign: "center", padding: 32 } }, e("p", { className: "text-muted" }, "No workouts yet. Create one!")),
+      wl.map(w => e("div", { key: w.id, className: "card" },
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+          e("div", { style: { fontSize: 18, fontWeight: 600 } }, w.name),
+          e("div", { style: { display: "flex", gap: 12 } },
+            e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>startEdit(w) }, "Edit"),
+            e("button", { style: { background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13 }, onClick: ()=>del(w.id) }, "Delete"),
+          ),
+        ),
+        w.exercises.map(ex => e("div", { key: ex.id, style: { display: "flex", justifyContent: "space-between", fontSize: 13, color: "#d4d4d8", padding: "2px 0" } },
+          e("span", null, ex.name),
+          e("span", { style: { color: "#71717a" } }, ex.sets+"×"+ex.defaultReps + (ex.alternatives.length > 0 ? " (+"+ex.alternatives.length+" alt)" : "")),
+        )),
+      )),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // TRACKING SESSION
+  // ═══════════════════════════════════════════════════════════════════
+  function TrackingSession({ state, dispatch }) {
+    const s = state.trackingSession; if (!s) return null;
+    const w = state.workouts[s.workoutId];
+    const [showSwap, setShowSwap] = useState(null);
+
+    const updSet = (ei, si, f, v) => {
+      const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,sets:ex.sets.map((st,j)=>j!==si?st:{...st,[f]:v})});
+      dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}});
+    };
+    const addSet = ei => {
+      const exs = s.exercises.map((ex,i)=>{if(i!==ei)return ex;const last=ex.sets[ex.sets.length-1]||{reps:10,weight:0,effort:5};return{...ex,sets:[...ex.sets,{...last}]};});
+      dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}});
+    };
+    const remSet = (ei,si) => {
+      const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,sets:ex.sets.filter((_,j)=>j!==si)});
+      dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}});
+    };
+    const swap = (ei,nm) => {
+      const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,name:nm,exerciseId:uid()});
+      dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}}); setShowSwap(null);
+    };
+    const getAlts = ei => (w && w.exercises[ei]) ? w.exercises[ei].alternatives || [] : [];
+
+    return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
+      e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+        e("div", null,
+          e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, (w||{}).name || "Workout"),
+          s.wasOverride && e("span", { style: { fontSize: 12, color: "#f97316" } }, "Override"),
+        ),
+        e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>dispatch({type:"CANCEL_TRACKING"}) }, "Cancel"),
+      ),
+      s.exercises.map((ex, ei) => e("div", { key: ex.exerciseId+ei, className: "card" },
+        e("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 12 } },
+          e("div", { style: { fontWeight: 600 } }, ex.name),
+          e("button", { style: { background:"none",border:"none",color:"#f97316",cursor:"pointer",fontSize:12 }, onClick: ()=>setShowSwap(showSwap===ei?null:ei) }, "Swap"),
+        ),
+        showSwap === ei && e("div", { style: { background: "#3f3f46", borderRadius: 8, padding: 12, marginBottom: 12 } },
+          e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 8 } }, "Alternatives:"),
+          getAlts(ei).length > 0
+            ? getAlts(ei).map(alt => e("button", { key: alt, style: { display: "block", width: "100%", textAlign: "left", padding: "6px 8px", borderRadius: 4, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onClick: ()=>swap(ei,alt) }, alt))
+            : e("p", { style: { fontSize: 12, color: "#52525b" } }, "No alternatives defined."),
+        ),
+        // Header row
+        e("div", { style: { display: "grid", gridTemplateColumns: "24px 1fr 70px 1fr 24px", gap: 4, marginBottom: 4 } },
+          e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
+          e("div", { style: { fontSize: 10, color: "#71717a" } }, "Weight"),
+          e("div", { style: { fontSize: 10, color: "#71717a" } }, "Reps"),
+          e("div", { style: { fontSize: 10, color: "#71717a" } }, "Effort"),
+          e("div"),
+        ),
+        ex.sets.map((set, si) => e("div", { key: si, style: { display: "grid", gridTemplateColumns: "24px 1fr 70px 1fr 24px", gap: 4, alignItems: "center", marginBottom: 4 } },
+          e("div", { style: { fontSize: 12, color: "#71717a" } }, si+1),
+          e("input", { type: "number", min: 0, step: 2.5, value: set.weight, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
+          e("input", { type: "number", min: 0, value: set.reps, onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
+          e("div", { className: "effort-bar" },
+            e("input", { type: "range", min: 1, max: 10, value: set.effort, onInput: ev => updSet(ei,si,"effort",parseInt(ev.target.value)) }),
+            e("span", { style: { fontSize: 11, fontFamily: "monospace", color: effortColor(set.effort), minWidth: 16, textAlign: "right" } }, set.effort),
+          ),
+          e("button", { onClick: ()=>remSet(ei,si), style: { background:"none",border:"none",color:"#52525b",cursor:"pointer",fontSize:12 } }, "✕"),
+        )),
+        e("button", { className: "btn btn-ghost", style: { width: "100%", fontSize: 12, padding: 6, marginTop: 4 }, onClick: ()=>addSet(ei) }, "+ Add Set"),
+      )),
+      e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: ()=>dispatch({type:"SAVE_WORKOUT"}) }, "Save Workout"),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ANALYTICS
+  // ═══════════════════════════════════════════════════════════════════
+  function Analytics({ state }) {
+    const [selEx, setSelEx] = useState("");
+    const [selW, setSelW] = useState("");
+    const allEx = useMemo(()=>{const n=new Set();state.history.forEach(h=>h.exercises.forEach(x=>n.add(x.name)));return[...n].sort();},[state.history]);
+    const allWN = useMemo(()=>{const n=new Set();state.history.forEach(h=>n.add(h.workoutName));return[...n].sort();},[state.history]);
+
+    const exTrend = useMemo(()=>{
+      if(!selEx)return[];
+      return state.history.filter(h=>h.exercises.some(x=>x.name===selEx)).map(h=>{
+        const x=h.exercises.find(ex=>ex.name===selEx);
+        return{date:h.date.slice(5),maxWeight:Math.max(...x.sets.map(s=>s.weight)),totalReps:x.sets.reduce((a,s)=>a+s.reps,0),avgEffort:Math.round(x.sets.reduce((a,s)=>a+s.effort,0)/x.sets.length*10)/10};
+      });
+    },[selEx,state.history]);
+
+    const volTrend = useMemo(()=>{
+      return(selW?state.history.filter(h=>h.workoutName===selW):state.history).map(h=>({date:h.date.slice(5),volume:h.exercises.reduce((a,x)=>a+x.sets.reduce((b,s)=>b+s.reps*s.weight,0),0)}));
+    },[selW,state.history]);
+
+    const weightData = state.weightLog.map(w => ({ date: w.date.slice(5), weight: w.weight }));
+
+    const prs = useMemo(()=>{
+      const r={};state.history.forEach(h=>h.exercises.forEach(x=>x.sets.forEach(s=>{if(!r[x.name]||s.weight>r[x.name].weight)r[x.name]={weight:s.weight,reps:s.reps,date:h.date};})));
+      return Object.entries(r).filter(([,v])=>v.weight>0).sort((a,b)=>b[1].weight-a[1].weight);
+    },[state.history]);
+
+    if (state.history.length === 0) return e("div", { style: { padding: 16 } },
+      e("h2", { style: { fontSize: 20, fontWeight: 700, marginBottom: 16 } }, "Analytics"),
+      e("div", { className: "card", style: { textAlign: "center", padding: 32 } }, e("p", { className: "text-muted" }, "No data yet. Start tracking!"))
+    );
+
+    return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
+      e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Analytics"),
+      // Body weight
+      weightData.length > 1 && e("div", { className: "card" },
+        e("div", { className: "label" }, "Body Weight Trend"),
+        e(MiniLineChart, { data: weightData, dataKey: "weight", color: "#f97316", width: 340, height: 160 }),
+      ),
+      // Volume
+      e("div", { className: "card" },
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+          e("div", { className: "label", style: { margin: 0 } }, "Volume Trend"),
+          e("select", { value: selW, onChange: ev => setSelW(ev.target.value), style: { fontSize: 12 } },
+            e("option", { value: "" }, "All Workouts"),
+            allWN.map(n => e("option", { key: n, value: n }, n)),
+          ),
+        ),
+        e(MiniBarChart, { data: volTrend, dataKey: "volume", color: "#f97316", width: 340, height: 160 }),
+      ),
+      // Exercise progress
+      e("div", { className: "card" },
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+          e("div", { className: "label", style: { margin: 0 } }, "Exercise Progress"),
+          e("select", { value: selEx, onChange: ev => setSelEx(ev.target.value), style: { fontSize: 12 } },
+            e("option", { value: "" }, "Select exercise..."),
+            allEx.map(n => e("option", { key: n, value: n }, n)),
+          ),
+        ),
+        selEx ? e(MiniLineChart, { data: exTrend, dataKey: "maxWeight", color: "#f97316", width: 340, height: 160, label: "Max Weight" }) :
+          e("p", { style: { color: "#52525b", fontSize: 13, textAlign: "center", padding: "24px 0" } }, "Select an exercise to see trends"),
+      ),
+      // PRs
+      prs.length > 0 && e("div", { className: "card" },
+        e("div", { className: "label" }, "Personal Records"),
+        prs.slice(0, 10).map(([name, pr]) => e("div", { key: name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(63,63,70,0.5)", borderRadius: 8, padding: "8px 12px", marginBottom: 6 } },
+          e("span", { style: { fontSize: 13, color: "#e4e4e7" } }, name),
+          e("div", { style: { textAlign: "right" } },
+            e("span", { style: { fontSize: 13, fontWeight: 600, color: "#f97316" } }, pr.weight + " lbs"),
+            e("span", { style: { fontSize: 11, color: "#71717a", marginLeft: 4 } }, "× " + pr.reps),
+            e("div", { style: { fontSize: 11, color: "#52525b" } }, pr.date),
+          ),
+        )),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DATA / SETTINGS
+  // ═══════════════════════════════════════════════════════════════════
+  function DataSettings({ state, dispatch, onForceSync }) {
+    const fileRef = useRef(null);
+    const [status, setStatus] = useState("");
+
+    const exportData = () => {
+      const data = { ...state }; delete data.activeView; delete data.trackingSession;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = "workout-data-" + toDateStr(new Date()) + ".json"; a.click(); URL.revokeObjectURL(url);
+    };
+    const importData = ev => {
+      const file = ev.target.files && ev.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.workouts && data.history !== undefined) { dispatch({type:"IMPORT_STATE",state:data}); try{await sheetsService.saveAll(data)}catch(ex){} }
+          else alert("Invalid file.");
+        } catch(ex) { alert("Failed to parse JSON."); }
+      };
+      reader.readAsText(file);
+    };
+    const sync = async () => { setStatus("syncing"); try{await onForceSync();setStatus("done");setTimeout(()=>setStatus(""),2000);}catch(ex){setStatus("error");} };
+
+    return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
+      e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Data Management"),
+      e("div", { className: "card", style: { display: "flex", flexDirection: "column", gap: 16 } },
+        e("div", null,
+          e("div", { style: { fontSize: 14, fontWeight: 500, marginBottom: 4 } }, "Sync to Google Sheets"),
+          e("p", { className: "text-muted", style: { fontSize: 12, marginBottom: 12 } }, "Force a full sync of all data."),
+          e("button", { className: "btn btn-blue", style: { width: "100%" }, onClick: sync, disabled: status==="syncing" },
+            status==="syncing" ? "Syncing..." : status==="done" ? "Synced!" : "Sync Now"),
+        ),
+        e("hr", { style: { border: "none", borderTop: "1px solid #3f3f46" } }),
+        e("div", null,
+          e("div", { style: { fontSize: 14, fontWeight: 500, marginBottom: 4 } }, "Export JSON Backup"),
+          e("p", { className: "text-muted", style: { fontSize: 12, marginBottom: 12 } }, "Download all data as a local file."),
+          e("button", { className: "btn btn-accent", style: { width: "100%" }, onClick: exportData }, "Export JSON"),
+        ),
+        e("hr", { style: { border: "none", borderTop: "1px solid #3f3f46" } }),
+        e("div", null,
+          e("div", { style: { fontSize: 14, fontWeight: 500, marginBottom: 4 } }, "Import JSON"),
+          e("p", { className: "text-muted", style: { fontSize: 12, marginBottom: 12 } }, "Restore from a backup file."),
+          e("input", { type: "file", ref: fileRef, accept: ".json", onChange: importData, style: { display: "none" } }),
+          e("button", { className: "btn btn-dark", style: { width: "100%" }, onClick: () => fileRef.current && fileRef.current.click() }, "Import JSON"),
+        ),
+      ),
+      e("div", { className: "card" },
+        e("div", { className: "label" }, "Data Summary"),
+        [["Workouts defined", Object.keys(state.workouts).length],["Sessions tracked",state.history.length],["Weight entries",state.weightLog.length],["Total sets",state.history.reduce((a,h)=>a+h.exercises.reduce((b,x)=>b+x.sets.length,0),0)]].map(([l,v]) =>
+          e("div", { key: l, style: { display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" } },
+            e("span", { className: "text-muted" }, l), e("span", null, v))
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MAIN APP
+  // ═══════════════════════════════════════════════════════════════════
+  function App() {
+    const [authState, setAuthState] = useState("loading");
+    const [user, setUser] = useState(null);
+    const [state, dispatch] = useReducer(reducer, null, makeInitialState);
+    const [syncing, setSyncing] = useState(false);
+    const [loadMsg, setLoadMsg] = useState("Loading...");
+    const syncTimeout = useRef(null);
+    const prevState = useRef(null);
+
+    useEffect(() => {
+      const check = setInterval(() => { if(typeof google!=="undefined"&&google.accounts){clearInterval(check);setAuthState("login");} }, 200);
+      const fb = setTimeout(() => {clearInterval(check);setAuthState("login");}, 5000);
+      return () => { clearInterval(check); clearTimeout(fb); };
+    }, []);
+
+    const syncToSheets = useCallback(async (st) => {
+      if(!sheetsService.accessToken||!sheetsService.spreadsheetId)return;
+      setSyncing(true); try{await sheetsService.saveAll(st);}catch(ex){console.warn("Sync:",ex);}finally{setSyncing(false);}
+    }, []);
+
+    useEffect(() => {
+      if(authState!=="ready")return;
+      const{activeView,trackingSession,...cur}=state;
+      if(prevState.current){const{activeView:_,trackingSession:__,...prev}=prevState.current;if(JSON.stringify(cur)===JSON.stringify(prev))return;}
+      prevState.current=state;
+      if(syncTimeout.current)clearTimeout(syncTimeout.current);
+      syncTimeout.current=setTimeout(()=>syncToSheets(state),2000);
+    }, [state, authState, syncToSheets]);
+
+    const handleLogin = useCallback(async (token) => {
+      setAuthState("loading"); setLoadMsg("Connecting...");
+      sheetsService.accessToken = token;
+      try{const r=await fetch("https://www.googleapis.com/oauth2/v3/userinfo",{headers:{Authorization:"Bearer "+token}});if(r.ok)setUser(await r.json());}catch(ex){}
+      try{
+        setLoadMsg("Looking for your data...");
+        let id=await sheetsService.findSpreadsheet();
+        if(!id){setLoadMsg("Setting up spreadsheet...");id=await sheetsService.createSpreadsheet();}
+        sheetsService.spreadsheetId=id;
+        setLoadMsg("Loading workouts...");
+        const data=await sheetsService.loadAll();
+        dispatch({type:"LOAD_FROM_SHEETS",data});
+        prevState.current={...state,...data};
+        setAuthState("ready");
+      }catch(ex){console.error(ex);setLoadMsg("Failed. Try again.");setTimeout(()=>setAuthState("login"),2000);}
+    }, []);
+
+    const handleSignOut = useCallback(() => {
+      if(sheetsService.accessToken)try{google.accounts.oauth2.revoke(sheetsService.accessToken)}catch(ex){}
+      sheetsService.accessToken=null;sheetsService.spreadsheetId=null;setUser(null);setAuthState("login");
+    }, []);
+
+    if(authState==="loading") return e(LoadingScreen, { message: loadMsg });
+    if(authState==="login") return e(LoginScreen, { onLogin: handleLogin });
+
+    return e("div", { style: { minHeight: "100vh", background: "#18181b", color: "#fff", maxWidth: 480, margin: "0 auto" } },
+      state.activeView === "tracking" && state.trackingSession
+        ? e(TrackingSession, { state, dispatch })
+        : [
+          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, user, onSignOut: handleSignOut, syncing }),
+          e("div", { key: "content", style: { paddingBottom: 80 } },
+            state.activeView === "dashboard" && e(Dashboard, { state, dispatch }),
+            state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch }),
+            state.activeView === "workouts" && e(WorkoutBuilder, { state, dispatch }),
+            state.activeView === "analytics" && e(Analytics, { state }),
+            state.activeView === "settings" && e(DataSettings, { state, dispatch, onForceSync: () => syncToSheets(state) }),
+          ),
+        ]
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(e(App));
+})();
+</script>
+</body>
+</html>
