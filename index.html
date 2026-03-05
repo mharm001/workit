@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.27.0";
+  const APP_VERSION = "2.28.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1869,21 +1869,7 @@
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
-          // If user had an active session, try silent re-auth
-          if (target === "offline") {
-            try {
-              const client = google.accounts.oauth2.initTokenClient({
-                client_id: GOOGLE_CLIENT_ID, scope: SCOPES, prompt: "",
-                callback: async (resp) => {
-                  if (resp.error) { setAuthState("offline"); setSyncStatus("offline"); return; }
-                  await connectSheets(resp.access_token);
-                },
-              });
-              client.requestAccessToken();
-            } catch(ex) { setAuthState("offline"); setSyncStatus("offline"); }
-          } else {
-            setAuthState(target);
-          }
+          setAuthState(target);
         }
       }, 200);
       const fb = setTimeout(() => { clearInterval(check); setAuthState(target); }, 3000);
