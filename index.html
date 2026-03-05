@@ -69,6 +69,8 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
+  const APP_VERSION = "1.1.0";
+  const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
   const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
   const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
@@ -425,6 +427,15 @@
         cadenceSchedule: config.cadenceSchedule || {restMode:"manual",autoRestEvery:3,rotation:[],currentIndex:0},
         workouts: workouts, history: history, weightLog: weightLog,
       };
+    },
+
+    async resetSpreadsheet() {
+      if (!this.spreadsheetId) return;
+      await Promise.all([
+        this._clearAndWrite("config!A1:B200", [["key","value"]]),
+        this._clearAndWrite("history!A1:G50000", [["Date","Workout","Exercise","Set #","Reps","Weight (lbs)","Effort (1-10)"]]),
+        this._clearAndWrite("weight!A1:B1000", [["Date","Weight (lbs)"]]),
+      ]);
     },
 
     async saveAll(state) {
@@ -1081,9 +1092,16 @@
   // ═══════════════════════════════════════════════════════════════════
   // DATA / SETTINGS
   // ═══════════════════════════════════════════════════════════════════
-  function DataSettings({ state, dispatch, onForceSync }) {
+  function DataSettings({ state, dispatch, onForceSync, onReset }) {
     const fileRef = useRef(null);
     const [status, setStatus] = useState("");
+    const [resetConfirm, setResetConfirm] = useState(false);
+
+    const doReset = async () => {
+      setStatus("resetting");
+      try { await onReset(); setStatus("reset-done"); setResetConfirm(false); setTimeout(()=>setStatus(""),2000); }
+      catch(ex) { setStatus("reset-error"); console.warn("Reset:",ex); }
+    };
 
     const exportData = () => {
       const data = { ...state }; delete data.activeView; delete data.trackingSession;
@@ -1127,6 +1145,21 @@
           e("input", { type: "file", ref: fileRef, accept: ".json", onChange: importData, style: { display: "none" } }),
           e("button", { className: "btn btn-dark", style: { width: "100%" }, onClick: () => fileRef.current && fileRef.current.click() }, "Import JSON"),
         ),
+        e("hr", { style: { border: "none", borderTop: "1px solid #3f3f46" } }),
+        e("div", null,
+          e("div", { style: { fontSize: 14, fontWeight: 500, marginBottom: 4, color: "#ef4444" } }, "Reset Spreadsheet"),
+          e("p", { className: "text-muted", style: { fontSize: 12, marginBottom: 12 } }, "Clear all data from the Google Sheet and start fresh. All tracked history will be lost."),
+          !resetConfirm
+            ? e("button", { style: { width: "100%", padding: "10px 16px", borderRadius: 8, border: "1px solid #dc2626", background: "transparent", color: "#ef4444", fontSize: 14, fontWeight: 500, cursor: "pointer" }, onClick: () => setResetConfirm(true), disabled: status==="resetting" }, "Reset")
+            : e("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+                e("p", { style: { fontSize: 13, color: "#ef4444", fontWeight: 500, textAlign: "center" } }, "Are you sure? This cannot be undone."),
+                e("div", { style: { display: "flex", gap: 8 } },
+                  e("button", { style: { flex: 1, padding: "10px 16px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer" }, onClick: doReset, disabled: status==="resetting" },
+                    status==="resetting" ? "Resetting..." : status==="reset-done" ? "Done!" : "Yes, Reset Everything"),
+                  e("button", { style: { flex: 1, padding: "10px 16px", borderRadius: 8, border: "1px solid #3f3f46", background: "transparent", color: "#a1a1aa", fontSize: 14, cursor: "pointer" }, onClick: () => setResetConfirm(false) }, "Cancel"),
+                ),
+              ),
+        ),
       ),
       e("div", { className: "card" },
         e("div", { className: "label" }, "Data Summary"),
@@ -1134,6 +1167,13 @@
           e("div", { key: l, style: { display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" } },
             e("span", { className: "text-muted" }, l), e("span", null, v))
         ),
+      ),
+      e("div", { className: "card", style: { textAlign: "center" } },
+        e("div", { style: { fontSize: 24, marginBottom: 4 } }, "\uD83C\uDFCB\uFE0F"),
+        e("div", { style: { fontSize: 16, fontWeight: 700, marginBottom: 2 } }, "Workit"),
+        e("div", { className: "text-muted", style: { fontSize: 13, marginBottom: 8 } }, "v" + APP_VERSION + " \u00B7 " + APP_BUILD_DATE),
+        e("div", { className: "text-muted", style: { fontSize: 11 } }, "Track workouts, reps, weight & progress"),
+        e("div", { className: "text-muted", style: { fontSize: 11, marginTop: 4 } }, "harmant.app/workit"),
       ),
     );
   }
@@ -1205,7 +1245,10 @@
             state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch }),
             state.activeView === "workouts" && e(WorkoutBuilder, { state, dispatch }),
             state.activeView === "analytics" && e(Analytics, { state }),
-            state.activeView === "settings" && e(DataSettings, { state, dispatch, onForceSync: () => syncToSheets(state) }),
+            state.activeView === "settings" && e(DataSettings, { state, dispatch, onForceSync: () => syncToSheets(state), onReset: async () => {
+              await sheetsService.resetSpreadsheet();
+              dispatch({type:"IMPORT_STATE",state:makeInitialState()});
+            }}),
           ),
         ]
     );
