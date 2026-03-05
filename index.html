@@ -53,7 +53,6 @@
     .fade-in { animation: fadeIn 0.3s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .user-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid #1f1f23; }
-    .user-bar img { width: 24px; height: 24px; border-radius: 50%; }
     .google-btn { display: flex; align-items: center; justify-content: center; gap: 12px; background: #fff; color: #333; font-weight: 500; padding: 12px; border-radius: 8px; border: none; cursor: pointer; width: 100%; font-size: 15px; }
     .google-btn:hover { background: #f3f4f6; }
     .stat-box { background: var(--card); border-radius: 8px; padding: 12px; text-align: center; }
@@ -75,7 +74,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "1.5.3";
+  const APP_VERSION = "1.5.5";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -770,15 +769,14 @@
   // ═══════════════════════════════════════════════════════════════════
   // NAV
   // ═══════════════════════════════════════════════════════════════════
-  function NavBar({ activeView, dispatch, user, isConnected, onSignOut, syncing, syncStatus, onReconnect }) {
+  function NavBar({ activeView, dispatch, isConnected, onSignOut, syncing, syncStatus, onReconnect }) {
     const tabs = [{id:"dashboard",label:"Home",icon:"🏠"},{id:"schedule",label:"Schedule",icon:"📅"},{id:"workouts",label:"Workouts",icon:"💪"},{id:"analytics",label:"Stats",icon:"📊"},{id:"settings",label:"Data",icon:"⚙️"}];
     const statusDot = syncStatus === "synced" ? "#4ade80" : syncStatus === "offline" ? "#facc15" : syncStatus === "error" ? "#ef4444" : "#71717a";
     const statusText = syncing ? "" : syncStatus === "synced" ? "Synced" : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync error" : "";
     return e("div", { style: { position: "sticky", top: 0, zIndex: 50 } },
       e("div", { className: "user-bar" },
         e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-          user && user.picture && e("img", { src: user.picture, alt: "", style: { width: 20, height: 20, borderRadius: "50%" } }),
-          e("span", { style: { fontSize: 12, color: "#a1a1aa" } }, isConnected ? (user && (user.name || user.email)) || "Connected" : "Offline"),
+          e("span", { style: { fontSize: 12, color: "#a1a1aa" } }, isConnected ? "Connected" : "Offline"),
           syncing && e("div", { className: "spinner", style: { width: 12, height: 12, borderWidth: 2 } }),
           statusText && e("span", { style: { fontSize: 10, color: statusDot, display: "flex", alignItems: "center", gap: 3 } },
             e("span", { style: { width: 6, height: 6, borderRadius: "50%", background: statusDot, display: "inline-block" } }), statusText),
@@ -1398,7 +1396,6 @@
     // authState: "loading" | "login" | "ready" | "offline"
     // "offline" = has local data but no valid token, app is fully usable
     const [authState, setAuthState] = useState("loading");
-    const [user, setUser] = useState(null);
     const [state, dispatch] = useReducer(reducer, null, makeInitialState);
     const [syncing, setSyncing] = useState(false);
     const [syncStatus, setSyncStatus] = useState(""); // "" | "synced" | "offline" | "error"
@@ -1409,7 +1406,8 @@
     // ── 1. On mount: load from localStorage instantly, then try Google auth
     useEffect(() => {
       const cached = loadLocal();
-      if (cached) {
+      const signedOut = localStorage.getItem("workit_signed_out") === "1";
+      if (cached && !signedOut) {
         const { trackingSession, ...data } = cached;
         dispatch({type:"LOAD_FROM_SHEETS", data});
         if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
@@ -1419,13 +1417,13 @@
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
-          if (cached) setAuthState("offline");
+          if (cached && !signedOut) setAuthState("offline");
           else setAuthState("login");
         }
       }, 200);
       const fb = setTimeout(() => {
         clearInterval(check);
-        if (cached) setAuthState("offline");
+        if (cached && !signedOut) setAuthState("offline");
         else setAuthState("login");
       }, 3000);
       return () => { clearInterval(check); clearTimeout(fb); };
@@ -1459,7 +1457,6 @@
     // ── 5. Connect to Sheets (shared by login + reconnect)
     const connectSheets = useCallback(async (token) => {
       sheetsService.accessToken = token;
-      try{const r=await fetch("https://www.googleapis.com/oauth2/v3/userinfo",{headers:{Authorization:"Bearer "+token}});if(r.ok)setUser(await r.json());}catch(ex){}
       try{
         let id=await sheetsService.findSpreadsheet();
         if(!id) id=await sheetsService.createSpreadsheet();
@@ -1478,6 +1475,7 @@
           prevState.current={...makeInitialState(),...remoteData};
         }
         setAuthState("ready"); setSyncStatus("synced");
+        try{localStorage.removeItem("workit_signed_out")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, []);
 
@@ -1490,8 +1488,10 @@
     // ── 7. Sign out
     const handleSignOut = useCallback(() => {
       if(sheetsService.accessToken)try{google.accounts.oauth2.revoke(sheetsService.accessToken)}catch(ex){}
-      sheetsService.accessToken=null;sheetsService.spreadsheetId=null;setUser(null);
+      sheetsService.accessToken=null;sheetsService.spreadsheetId=null;
       // Don't clear local data — keep it available for next sign-in
+      // But flag that user explicitly signed out so reload goes to login, not offline
+      try{localStorage.setItem("workit_signed_out","1")}catch(e){}
       setAuthState("login"); setSyncStatus("");
     }, []);
 
@@ -1516,7 +1516,7 @@
       state.activeView === "tracking" && state.trackingSession
         ? e(TrackingSession, { state, dispatch })
         : [
-          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, user, isConnected: authState==="ready", onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect }),
+          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, isConnected: authState==="ready", onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect }),
           e("div", { key: "content", style: { paddingBottom: 80 } },
             state.activeView === "dashboard" && e(Dashboard, { state, dispatch }),
             state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch }),
