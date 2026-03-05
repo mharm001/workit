@@ -3,7 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>Workout Tracker</title>
+  <title>Workit</title>
+  <meta name="apple-mobile-web-app-title" content="Workit">
+  <meta name="application-name" content="Workit">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0c0c0c">
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
@@ -643,29 +648,71 @@
         client.requestAccessToken();
       } catch(ex) { setError(ex.message); setLoading(false); }
     };
-    return e("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } },
-      e("div", { style: { maxWidth: 380, width: "100%", textAlign: "center" } },
-        e("div", { style: { fontSize: 48, marginBottom: 8 } }, "🏋️"),
-        e("h1", { style: { fontSize: 28, fontWeight: 700, color: "#fff", margin: "0 0 4px" } }, "Workout Tracker"),
-        e("p", { className: "text-muted", style: { fontSize: 14, marginBottom: 24 } }, "Track your progress. Beat your records."),
-        e("div", { className: "card", style: { padding: 24 } },
-          e("p", { style: { color: "#d4d4d8", fontSize: 14, marginBottom: 16 } }, "Sign in with Google to sync your workout data to a private Google Sheet."),
-          e("div", { style: { background: "#3f3f46", borderRadius: 8, padding: 12, textAlign: "left", marginBottom: 16 } },
-            e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 4 } }, "Privacy"),
-            e("p", { style: { fontSize: 12, color: "#d4d4d8", margin: 0 } }, "Uses ", e("span", { style: { color: "#f97316", fontFamily: "monospace" } }, "drive.file"), " scope — can ", e("strong", null, "only"), " access the single spreadsheet it creates."),
+    // Bar chart logo mark
+    var bars = [32, 24, 40, 20, 28];
+    var barColors = [1, 0.7, 1, 0.5, 0.8];
+    return e("div", { style: { minHeight: "100vh", display: "flex", flexDirection: "column", background: "#0c0c0c", overflow: "hidden" } },
+      // Top accent stripe
+      e("div", { style: { height: 3, background: "linear-gradient(90deg, #f97316, #ef4444, #f97316)" } }),
+      // Content
+      e("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, position: "relative" } },
+        // Subtle grid pattern overlay
+        e("div", { style: { position: "absolute", inset: 0, opacity: 0.03,
+          backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)",
+          backgroundSize: "40px 40px", pointerEvents: "none" } }),
+        e("div", { style: { maxWidth: 400, width: "100%", position: "relative", zIndex: 1 } },
+          // Hero section
+          e("div", { style: { textAlign: "center", marginBottom: 32 } },
+            // Bar chart logo
+            e("div", { style: { display: "inline-flex", alignItems: "flex-end", gap: 4, marginBottom: 16 } },
+              bars.map(function(h, i) {
+                return e("div", { key: i, style: { width: 4, height: h, background: "#f97316", borderRadius: 2, opacity: barColors[i] } });
+              })
+            ),
+            e("h1", { style: { fontSize: 36, fontWeight: 800, color: "#fff", textTransform: "uppercase", letterSpacing: 4, margin: 0 } }, "Workit"),
+            e("p", { style: { fontSize: 13, color: "#525252", marginTop: 8, letterSpacing: 2, textTransform: "uppercase" } }, "Track \u00B7 Train \u00B7 Progress"),
           ),
-          e("button", { className: "google-btn", onClick: handleLogin, disabled: loading },
-            loading ? e("div", { className: "spinner", style: { width: 20, height: 20, borderWidth: 2 } }) :
-            [e("svg", { key: "g", width: 18, height: 18, viewBox: "0 0 48 48" },
-              e("path", { fill: "#EA4335", d: "M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" }),
-              e("path", { fill: "#4285F4", d: "M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" }),
-              e("path", { fill: "#FBBC05", d: "M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" }),
-              e("path", { fill: "#34A853", d: "M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" }),
-            ), " Sign in with Google"]
+          // Main card
+          e("div", { style: { background: "#141414", border: "1px solid #1f1f1f", borderRadius: 16, overflow: "hidden" } },
+            e("div", { style: { padding: "28px 28px 24px" } },
+              // Stats row
+              e("div", { style: { display: "flex", justifyContent: "center", gap: 32, marginBottom: 24 } },
+                [["200+", "Exercises"], ["\u221E", "Workouts"], ["$0", "Forever"]].map(function(s) {
+                  return e("div", { key: s[1], style: { textAlign: "center" } },
+                    e("div", { style: { fontSize: 24, fontWeight: 700, color: "#f97316" } }, s[0]),
+                    e("div", { style: { fontSize: 9, color: "#525252", textTransform: "uppercase", letterSpacing: 1.5, marginTop: 2 } }, s[1]),
+                  );
+                })
+              ),
+              // CTA button
+              e("button", { onClick: handleLogin, disabled: loading, style: { width: "100%", padding: "16px 24px", borderRadius: 12, border: "2px solid #f97316",
+                background: "transparent", color: "#f97316", fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                textTransform: "uppercase", letterSpacing: 1, transition: "all 0.2s" },
+                onMouseOver: function(ev){ev.currentTarget.style.background="#f97316";ev.currentTarget.style.color="#000"},
+                onMouseOut: function(ev){ev.currentTarget.style.background="transparent";ev.currentTarget.style.color="#f97316"} },
+                loading ? e("div", { className: "spinner", style: { width: 20, height: 20, borderWidth: 2 } }) :
+                [e("svg", { key: "g", width: 16, height: 16, viewBox: "0 0 48 48" },
+                  e("path", { fill: "currentColor", d: "M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" }),
+                  e("path", { fill: "currentColor", d: "M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" }),
+                  e("path", { fill: "currentColor", d: "M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" }),
+                  e("path", { fill: "currentColor", d: "M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" }),
+                ), " Get Started"]
+              ),
+              error && e("div", { style: { background: "rgba(127,29,29,0.5)", border: "1px solid #991b1b", borderRadius: 8, padding: 12, marginTop: 12, fontSize: 13, color: "#fca5a5" } }, error),
+            ),
+            // Privacy footer inside card
+            e("div", { style: { padding: "16px 28px", background: "#111", borderTop: "1px solid #1f1f1f" } },
+              e("p", { style: { fontSize: 11, color: "#3a3a3a", textAlign: "center", lineHeight: 1.5, margin: 0 } },
+                "Uses ", e("code", { style: { color: "#f97316", fontFamily: "monospace", fontSize: 10 } }, "drive.file"),
+                " scope — your data lives in a private Google Sheet only this app can access."),
+            ),
           ),
-          error && e("div", { style: { background: "rgba(127,29,29,0.5)", border: "1px solid #991b1b", borderRadius: 8, padding: 12, marginTop: 12, fontSize: 13, color: "#fca5a5" } }, error),
+          // Footer
+          e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24 } },
+            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "harmant.app/workit"),
+            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "v" + APP_VERSION),
+          ),
         ),
-        e("p", { style: { color: "#52525b", fontSize: 12, marginTop: 16 } }, "Your data lives in a Google Sheet you own."),
       )
     );
   }
@@ -1245,8 +1292,6 @@
     const [loadMsg, setLoadMsg] = useState("Loading...");
     const syncTimeout = useRef(null);
     const prevState = useRef(null);
-    const tokenClient = useRef(null);
-    const tokenRefreshTimer = useRef(null);
 
     // ── 1. On mount: load from localStorage instantly, then try Google auth
     useEffect(() => {
@@ -1257,12 +1302,11 @@
         if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
         prevState.current = { ...makeInitialState(), ...data };
       }
-      // Wait for Google Identity Services to load
+      // Wait for Google Identity Services to load, then decide initial state
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
-          // If we have cached data, go straight to usable state
-          if (cached) { setAuthState("offline"); tryAutoReauth(); }
+          if (cached) setAuthState("offline");
           else setAuthState("login");
         }
       }, 200);
@@ -1270,7 +1314,7 @@
         clearInterval(check);
         if (cached) setAuthState("offline");
         else setAuthState("login");
-      }, 5000);
+      }, 3000);
       return () => { clearInterval(check); clearTimeout(fb); };
     }, []);
 
@@ -1299,38 +1343,9 @@
       syncTimeout.current=setTimeout(()=>syncToSheets(state),2000);
     }, [state, authState, syncToSheets]);
 
-    // ── 5. Silent token refresh (request new token before expiry)
-    const scheduleTokenRefresh = useCallback((expiresInSec) => {
-      if (tokenRefreshTimer.current) clearTimeout(tokenRefreshTimer.current);
-      // Refresh 5 minutes before expiry (or at 50min if 1hr token)
-      const refreshIn = Math.max((expiresInSec - 300) * 1000, 30000);
-      tokenRefreshTimer.current = setTimeout(() => {
-        if (!tokenClient.current) return;
-        try {
-          tokenClient.current.requestAccessToken({ prompt: "" });
-        } catch(ex) { console.warn("Token refresh failed:", ex); setSyncStatus("offline"); }
-      }, refreshIn);
-    }, []);
-
-    // ── 6. Try to silently re-authenticate (no popup if user already granted)
-    const tryAutoReauth = useCallback(() => {
-      try {
-        const client = google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
-          callback: async (resp) => {
-            if (resp.error) { setSyncStatus("offline"); return; }
-            await connectSheets(resp.access_token, resp.expires_in || 3600);
-          },
-        });
-        tokenClient.current = client;
-        client.requestAccessToken({ prompt: "" });
-      } catch(ex) { setSyncStatus("offline"); }
-    }, []);
-
-    // ── 7. Connect to Sheets (shared by login + auto-reauth)
-    const connectSheets = useCallback(async (token, expiresIn) => {
+    // ── 5. Connect to Sheets (shared by login + reconnect)
+    const connectSheets = useCallback(async (token) => {
       sheetsService.accessToken = token;
-      scheduleTokenRefresh(expiresIn || 3600);
       try{const r=await fetch("https://www.googleapis.com/oauth2/v3/userinfo",{headers:{Authorization:"Bearer "+token}});if(r.ok)setUser(await r.json());}catch(ex){}
       try{
         let id=await sheetsService.findSpreadsheet();
@@ -1342,53 +1357,47 @@
         // If local has more history entries, prefer local (user was tracking offline)
         if (localData && localData.history && localData.history.length > (remoteData.history||[]).length) {
           // Local is ahead — push local to sheets
-          await sheetsService.saveAll({...state});
+          const pushState = { ...makeInitialState(), ...localData };
+          await sheetsService.saveAll(pushState);
         } else {
           // Remote is same or ahead — load remote
           dispatch({type:"LOAD_FROM_SHEETS",data:remoteData});
-          prevState.current={...state,...remoteData};
+          prevState.current={...makeInitialState(),...remoteData};
         }
         setAuthState("ready"); setSyncStatus("synced");
-      }catch(ex){console.warn("Sheets connect:",ex);setSyncStatus("error");}
-    }, [state, scheduleTokenRefresh]);
+      }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
+    }, []);
 
-    // ── 8. Manual login (first time or re-auth after sign out)
+    // ── 6. Manual login (first time or re-auth)
     const handleLogin = useCallback(async (token) => {
       setAuthState("loading"); setLoadMsg("Connecting...");
-      await connectSheets(token, 3600);
-      if (authState === "loading") setAuthState("ready");
+      await connectSheets(token);
     }, [connectSheets]);
 
-    // ── 9. Sign out
+    // ── 7. Sign out
     const handleSignOut = useCallback(() => {
       if(sheetsService.accessToken)try{google.accounts.oauth2.revoke(sheetsService.accessToken)}catch(ex){}
       sheetsService.accessToken=null;sheetsService.spreadsheetId=null;setUser(null);
-      if(tokenRefreshTimer.current)clearTimeout(tokenRefreshTimer.current);
       // Don't clear local data — keep it available offline
       setAuthState("offline"); setSyncStatus("offline");
     }, []);
 
-    if(authState==="loading") {
-      const cached = loadLocal();
-      if (cached) return e(LoadingScreen, { message: "Loading..." });
-      return e(LoadingScreen, { message: loadMsg });
-    }
-    if(authState==="login") return e(LoginScreen, { onLogin: handleLogin });
-
-    // Reconnect handler for offline mode
+    // ── 8. Reconnect handler (user-initiated, won't be blocked)
     const handleReconnect = useCallback(() => {
       try {
         const client = google.accounts.oauth2.initTokenClient({
           client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
           callback: async (resp) => {
             if (resp.error) { setSyncStatus("error"); return; }
-            await connectSheets(resp.access_token, resp.expires_in || 3600);
+            await connectSheets(resp.access_token);
           },
         });
-        tokenClient.current = client;
         client.requestAccessToken();
       } catch(ex) { setSyncStatus("error"); }
     }, [connectSheets]);
+
+    if(authState==="loading") return e(LoadingScreen, { message: loadMsg });
+    if(authState==="login") return e(LoginScreen, { onLogin: handleLogin });
 
     return e("div", { style: { minHeight: "100vh", background: "#18181b", color: "#fff", maxWidth: 480, margin: "0 auto" } },
       state.activeView === "tracking" && state.trackingSession
