@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.6.0";
+  const APP_VERSION = "2.7.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1591,18 +1591,19 @@
     const syncTimeout = useRef(null);
     const prevState = useRef(null);
 
-    // ── 1. On mount: restore cached state if available, otherwise show login
+    // ── 1. On mount: restore session if user was active (signed in or mid-workout)
+    //    Only explicit sign-out clears the session flag → sends to login.
     useEffect(() => {
+      const hadSession = localStorage.getItem("workit_session") === "active";
       const cached = loadLocal();
-      if (cached) {
+      var target = "login";
+      if (hadSession && cached) {
         const { trackingSession, ...data } = cached;
         dispatch({type:"LOAD_FROM_SHEETS", data});
-        if (trackingSession) {
-          dispatch({type:"START_TRACKING", session: trackingSession});
-        }
+        if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
         prevState.current = { ...makeInitialState(), ...data };
+        target = "offline";
       }
-      const target = cached ? "offline" : "login";
       const check = setInterval(() => {
         if(typeof google!=="undefined"&&google.accounts){
           clearInterval(check);
@@ -1659,6 +1660,7 @@
           prevState.current={...makeInitialState(),...remoteData};
         }
         setAuthState("ready"); setSyncStatus("synced");
+        try{localStorage.setItem("workit_session","active")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, []);
 
@@ -1668,10 +1670,10 @@
       await connectSheets(token);
     }, [connectSheets]);
 
-    // ── 7. Sign out
+    // ── 7. Sign out — only way to get back to login screen
     const handleSignOut = useCallback(() => {
-      // Don't revoke token — just clear it. Revoking forces consent screen on next sign-in.
       sheetsService.accessToken=null;sheetsService.spreadsheetId=null;
+      try{localStorage.removeItem("workit_session")}catch(e){}
       setAuthState("login"); setSyncStatus("");
     }, []);
 
