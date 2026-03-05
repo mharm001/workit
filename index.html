@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>Workit</title>
+  <title>WorkIt - Workout Tracker</title>
   <meta name="apple-mobile-web-app-title" content="Workit">
   <meta name="application-name" content="Workit">
   <meta name="mobile-web-app-capable" content="yes">
@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.20.0";
+  const APP_VERSION = "2.22.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1012,7 +1012,7 @@
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
       // Header
       e("div", { style: { textAlign: "center" } },
-        e("h1", { style: { fontSize: 24, fontWeight: 700, margin: "0 0 4px" } }, "Workout Tracker"),
+        e("h1", { style: { fontSize: 24, fontWeight: 700, margin: "0 0 4px" } }, "WorkIt ", e("span", { style: { fontWeight: 400, color: "#71717a", fontSize: 18 } }, "Workout Tracker")),
         e("p", { className: "text-muted", style: { fontSize: 13, margin: 0 } }, new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})),
       ),
       // Stats
@@ -1999,6 +1999,10 @@
               clearLocal();
               dispatch({type:"IMPORT_STATE",state:makeInitialState()});
             }}),
+          ),
+          e("div", { key: "footer", style: { borderTop: "1px solid #1f1f1f", padding: "16px 16px 24px", marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } },
+            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "harmant.app/workit"),
+            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "v" + APP_VERSION),
           ),
         ]
     );
