@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.11.0";
+  const APP_VERSION = "2.12.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -867,12 +867,75 @@
     const [weightInput, setWeightInput] = useState("");
     const [bfInput, setBfInput] = useState("");
     const [showOverride, setShowOverride] = useState(false);
+    const [showPast, setShowPast] = useState(false);
     const workoutList = Object.values(state.workouts);
     const todayStr = toDateStr(new Date());
     const todayEntry = state.history.find(h => h.date === todayStr);
     const alreadyTracked = !!todayEntry;
-    const lastWorkout = state.history.length > 0 ? state.history[state.history.length - 1] : null;
+    // Compute summary stats for any history entry
+    const getWorkoutStats = (entry) => {
+      const workSets = entry.exercises.flatMap(ex => ex.sets.filter(s => !s.warmup));
+      const totalSets = workSets.length;
+      const totalVol = workSets.reduce((a, s) => a + s.reps * s.weight, 0);
+      const avgRir = workSets.length > 0 ? Math.round(workSets.reduce((a, s) => a + (s.rir !== undefined ? s.rir : 2), 0) / workSets.length * 10) / 10 : null;
+      // Most improved
+      const prevBests = {};
+      state.history.filter(h => h.date < entry.date).forEach(h => h.exercises.forEach(ex => ex.sets.filter(s => !s.warmup).forEach(s => {
+        const sc = calcE1RM(s.weight, s.reps); if (!sc) return;
+        if (!prevBests[ex.name] || sc > prevBests[ex.name]) prevBests[ex.name] = sc;
+      })));
+      var improved = null;
+      entry.exercises.forEach(ex => {
+        const topSet = ex.sets.filter(s => !s.warmup).reduce((b, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b.score ? { weight: s.weight, reps: s.reps, score: sc } : b; }, { score: 0 });
+        if (topSet.score > 0 && prevBests[ex.name]) {
+          const delta = topSet.score - prevBests[ex.name];
+          if (delta > 0 && (!improved || delta > improved.delta)) improved = { name: ex.name, delta: delta, weight: topSet.weight, reps: topSet.reps, score: topSet.score };
+        }
+      });
+      if (!improved) {
+        const best = entry.exercises.reduce((b, ex) => {
+          const top = ex.sets.filter(s => !s.warmup).reduce((b2, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b2.score ? { name: ex.name, weight: s.weight, reps: s.reps, score: sc } : b2; }, { score: 0 });
+          return top.score > b.score ? top : b;
+        }, { score: 0 });
+        if (best.score > 0) improved = { name: best.name, delta: 0, weight: best.weight, reps: best.reps, score: best.score };
+      }
+      return { totalSets, totalVol, avgRir, improved };
+    };
+
+    // Render stat blocks for a workout entry
+    const renderWorkoutStats = (stats) => {
+      return e("div", { style: { display: "flex", gap: 6 } },
+        e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center" } },
+          e("div", { style: { fontSize: 15, fontWeight: 700, color: "#f4f4f5" } }, stats.totalSets),
+          e("div", { style: { fontSize: 9, color: "#71717a" } }, "sets"),
+        ),
+        e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center" } },
+          e("div", { style: { fontSize: 15, fontWeight: 700, color: "#f97316" } }, stats.totalVol >= 1000 ? (stats.totalVol/1000).toFixed(1) + "k" : stats.totalVol),
+          e("div", { style: { fontSize: 9, color: "#71717a" } }, "volume"),
+        ),
+        stats.avgRir !== null && e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center" } },
+          e("div", { style: { fontSize: 15, fontWeight: 700, color: rirColor(Math.round(stats.avgRir)) } }, stats.avgRir.toFixed(1)),
+          e("div", { style: { fontSize: 9, color: "#71717a" } }, "avg RIR"),
+        ),
+        stats.improved && e("div", { style: { flex: 2, background: stats.improved.delta > 0 ? "rgba(22,163,74,0.15)" : "#27272a", border: stats.improved.delta > 0 ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", borderRadius: 8, padding: "5px 8px", textAlign: "center" } },
+          e("div", { style: { fontSize: 9, color: "#71717a", textTransform: "uppercase", letterSpacing: 0.5 } }, stats.improved.delta > 0 ? "Most Improved" : "Top Lift"),
+          e("div", { style: { fontSize: 12, fontWeight: 700, color: stats.improved.delta > 0 ? "#4ade80" : "#22d3ee" } }, stats.improved.name.split(" ").slice(0,2).join(" ")),
+          e("div", { style: { fontSize: 9, color: "#a1a1aa" } }, stats.improved.weight + state.weightUnit + "\u00d7" + stats.improved.reps + (stats.improved.delta > 0 ? " \u2191" + stats.improved.delta : "")),
+        ),
+      );
+    };
     const latestWeight = state.weightLog.length > 0 ? state.weightLog[state.weightLog.length - 1] : null;
+
+    const renderPastEntry = (entry, idx) => {
+      const stats = getWorkoutStats(entry);
+      return e("div", { key: (idx !== undefined ? idx : "last") + entry.date, style: { borderTop: "1px solid #27272a", paddingTop: 10, marginTop: 10 } },
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+          e("div", { style: { fontWeight: 600, fontSize: 14 } }, entry.workoutName),
+          e("div", { style: { fontSize: 11, color: "#71717a" } }, entry.date),
+        ),
+        renderWorkoutStats(stats),
+      );
+    };
 
     const getTodaysWorkout = () => {
       if (state.scheduleType === "weekly") { const slot = state.weeklySchedule.find(d => d.day === todayDay()); return slot ? slot.workoutId : null; }
@@ -990,48 +1053,7 @@
               ),
             ),
           ),
-          e("div", { key: "s", style: { display: "flex", gap: 8, marginBottom: 10 } },
-            (() => {
-              const workSets = todayEntry.exercises.flatMap(ex => ex.sets.filter(s => !s.warmup));
-              const totalSets = workSets.length;
-              const totalVol = workSets.reduce((a, s) => a + s.reps * s.weight, 0);
-              const prevBests = {};
-              state.history.filter(h => h.date < todayStr).forEach(h => h.exercises.forEach(ex => ex.sets.filter(s => !s.warmup).forEach(s => {
-                const sc = calcE1RM(s.weight, s.reps); if (!sc) return;
-                if (!prevBests[ex.name] || sc > prevBests[ex.name]) prevBests[ex.name] = sc;
-              })));
-              var improved = null;
-              todayEntry.exercises.forEach(ex => {
-                const topSet = ex.sets.filter(s => !s.warmup).reduce((b, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b.score ? { weight: s.weight, reps: s.reps, score: sc } : b; }, { score: 0 });
-                if (topSet.score > 0 && prevBests[ex.name]) {
-                  const delta = topSet.score - prevBests[ex.name];
-                  if (delta > 0 && (!improved || delta > improved.delta)) improved = { name: ex.name, delta: delta, weight: topSet.weight, reps: topSet.reps, score: topSet.score };
-                }
-              });
-              if (!improved) {
-                const best = todayEntry.exercises.reduce((b, ex) => {
-                  const top = ex.sets.filter(s => !s.warmup).reduce((b2, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b2.score ? { name: ex.name, weight: s.weight, reps: s.reps, score: sc } : b2; }, { score: 0 });
-                  return top.score > b.score ? top : b;
-                }, { score: 0 });
-                if (best.score > 0) improved = { name: best.name, delta: 0, weight: best.weight, reps: best.reps, score: best.score };
-              }
-              return [
-                e("div", { key: "sets", style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
-                  e("div", { style: { fontSize: 16, fontWeight: 700, color: "#f4f4f5" } }, totalSets),
-                  e("div", { style: { fontSize: 10, color: "#71717a" } }, "sets"),
-                ),
-                e("div", { key: "vol", style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
-                  e("div", { style: { fontSize: 16, fontWeight: 700, color: "#f97316" } }, totalVol >= 1000 ? (totalVol/1000).toFixed(1) + "k" : totalVol),
-                  e("div", { style: { fontSize: 10, color: "#71717a" } }, "volume"),
-                ),
-                improved && e("div", { key: "best", style: { flex: 2, background: improved.delta > 0 ? "rgba(22,163,74,0.15)" : "#27272a", border: improved.delta > 0 ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", borderRadius: 8, padding: "6px 10px", textAlign: "center" } },
-                  e("div", { style: { fontSize: 9, color: "#71717a", textTransform: "uppercase", letterSpacing: 0.5 } }, improved.delta > 0 ? "Most Improved" : "Top Lift"),
-                  e("div", { style: { fontSize: 13, fontWeight: 700, color: improved.delta > 0 ? "#4ade80" : "#22d3ee" } }, improved.name.split(" ").slice(0,2).join(" ")),
-                  e("div", { style: { fontSize: 10, color: "#a1a1aa" } }, improved.weight + state.weightUnit + "\u00d7" + improved.reps + (improved.delta > 0 ? " \u2191" + improved.delta : " \u00b7 " + improved.score + " e1RM")),
-                ),
-              ];
-            })()
-          ),
+          e("div", { key: "s", style: { marginBottom: 10 } }, renderWorkoutStats(getWorkoutStats(todayEntry))),
           e("button", { key: "b", className: "btn btn-accent", style: { width: "100%" }, onClick: () => editWorkout(todayEntry) }, "Edit Workout"),
         ] : [
           // ── Not yet tracked ──
@@ -1081,11 +1103,22 @@
           (() => { const t = state.weightLog.find(w => w.date === todayStr); return "Today: " + (t.weight||"—") + " " + state.weightUnit + (t.bodyFat != null ? " · " + t.bodyFat + "% bf" : ""); })()
         ),
       ),
-      // Last workout
-      lastWorkout && e("div", { className: "card" },
-        e("div", { className: "label" }, "Last Workout"),
-        e("div", { style: { fontWeight: 500 } }, lastWorkout.workoutName),
-        e("div", { className: "text-muted", style: { fontSize: 12 } }, lastWorkout.date + " — " + lastWorkout.exercises.length + " exercises, " + lastWorkout.exercises.reduce((a,ex) => a + ex.sets.length, 0) + " sets"),
+      // Recent workouts
+      state.history.length > 0 && e("div", { className: "card" },
+        e("button", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer" }, onClick: () => setShowPast(!showPast) },
+          e("div", { className: "label", style: { margin: 0 } }, "Recent Workouts"),
+          e("span", { style: { fontSize: 12, color: "#71717a" } }, showPast ? "\u25B2" : "\u25BC"),
+        ),
+        // Always show last workout summary
+        (() => {
+          const last = state.history[state.history.length - 1];
+          if (!last || last.date === todayStr) { const prev = state.history.length > 1 ? state.history[state.history.length - 2] : null; if (!prev) return null; return renderPastEntry(prev); }
+          return renderPastEntry(last);
+        })(),
+        // Expanded: show more past workouts
+        showPast && state.history.slice().reverse().filter(h => h.date !== todayStr).slice(1, 8).map((entry, i) =>
+          renderPastEntry(entry, i)
+        ),
       ),
       // Week preview
       state.scheduleType === "weekly" && e("div", { className: "card" },
