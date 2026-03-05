@@ -920,7 +920,7 @@
         e("div", { className: "stat-box" }, e("div", { className: "stat-num" }, latestWeight ? latestWeight.weight : "—"), e("div", { className: "stat-label" }, latestWeight ? state.weightUnit : "Weight")),
       ),
       // Today's workout
-      e("div", { className: "card" },
+      e("div", { className: "card", style: alreadyTracked ? { borderLeft: "3px solid #4ade80" } : {} },
         todayW ? (alreadyTracked ? [
           // ── Completed summary ──
           e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
@@ -928,17 +928,36 @@
               e("div", { className: "label" }, "Today's Workout"),
               e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayW.name),
             ),
-            e("span", { style: { fontSize: 18, lineHeight: 1 } }, "\u2705"),
+            e("div", { style: { background: "rgba(22,101,52,0.6)", borderRadius: 6, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 } },
+              e("span", { style: { color: "#4ade80", fontSize: 13, fontWeight: 600 } }, "\u2713 Done"),
+            ),
           ),
-          e("div", { key: "s", style: { display: "flex", gap: 12, marginBottom: 10 } },
+          e("div", { key: "s", style: { display: "flex", gap: 8, marginBottom: 10 } },
             (() => {
               const workSets = todayEntry.exercises.flatMap(ex => ex.sets.filter(s => !s.warmup));
               const totalSets = workSets.length;
               const totalVol = workSets.reduce((a, s) => a + s.reps * s.weight, 0);
-              const bestLift = todayEntry.exercises.reduce((best, ex) => {
-                const top = ex.sets.filter(s => !s.warmup).reduce((b, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b.score ? { name: ex.name, weight: s.weight, reps: s.reps, score: sc } : b; }, { score: 0 });
-                return top.score > best.score ? top : best;
-              }, { score: 0, name: "", weight: 0, reps: 0 });
+              // Find most improved: biggest e1RM delta vs previous history
+              const prevBests = {};
+              state.history.filter(h => h.date < todayStr).forEach(h => h.exercises.forEach(ex => ex.sets.filter(s => !s.warmup).forEach(s => {
+                const sc = calcE1RM(s.weight, s.reps); if (!sc) return;
+                if (!prevBests[ex.name] || sc > prevBests[ex.name]) prevBests[ex.name] = sc;
+              })));
+              var improved = null;
+              todayEntry.exercises.forEach(ex => {
+                const topSet = ex.sets.filter(s => !s.warmup).reduce((b, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b.score ? { weight: s.weight, reps: s.reps, score: sc } : b; }, { score: 0 });
+                if (topSet.score > 0 && prevBests[ex.name]) {
+                  const delta = topSet.score - prevBests[ex.name];
+                  if (delta > 0 && (!improved || delta > improved.delta)) improved = { name: ex.name, delta: delta, weight: topSet.weight, reps: topSet.reps, score: topSet.score };
+                }
+              });
+              if (!improved) {
+                const best = todayEntry.exercises.reduce((b, ex) => {
+                  const top = ex.sets.filter(s => !s.warmup).reduce((b2, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b2.score ? { name: ex.name, weight: s.weight, reps: s.reps, score: sc } : b2; }, { score: 0 });
+                  return top.score > b.score ? top : b;
+                }, { score: 0 });
+                if (best.score > 0) improved = { name: best.name, delta: 0, weight: best.weight, reps: best.reps, score: best.score };
+              }
               return [
                 e("div", { key: "sets", style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
                   e("div", { style: { fontSize: 16, fontWeight: 700, color: "#f4f4f5" } }, totalSets),
@@ -948,16 +967,16 @@
                   e("div", { style: { fontSize: 16, fontWeight: 700, color: "#f97316" } }, totalVol >= 1000 ? (totalVol/1000).toFixed(1) + "k" : totalVol),
                   e("div", { style: { fontSize: 10, color: "#71717a" } }, "volume"),
                 ),
-                bestLift.score > 0 && e("div", { key: "best", style: { flex: 2, background: "#27272a", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
-                  e("div", { style: { fontSize: 14, fontWeight: 700, color: "#22d3ee" } }, bestLift.name.split(" ").slice(0,2).join(" ")),
-                  e("div", { style: { fontSize: 10, color: "#71717a" } }, bestLift.weight + state.weightUnit + " \u00d7 " + bestLift.reps + " = " + bestLift.score + " SS"),
+                improved && e("div", { key: "best", style: { flex: 2, background: improved.delta > 0 ? "rgba(22,163,74,0.15)" : "#27272a", border: improved.delta > 0 ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", borderRadius: 8, padding: "8px 10px", textAlign: "center" } },
+                  e("div", { style: { fontSize: 13, fontWeight: 700, color: improved.delta > 0 ? "#4ade80" : "#22d3ee" } }, improved.name.split(" ").slice(0,2).join(" ")),
+                  e("div", { style: { fontSize: 10, color: "#a1a1aa" } }, improved.weight + state.weightUnit + "\u00d7" + improved.reps + (improved.delta > 0 ? " \u2191" + improved.delta + " SS" : " " + improved.score + " SS")),
                 ),
               ];
             })()
           ),
           e("div", { key: "b", style: { display: "flex", gap: 8 } },
-            e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => editWorkout(todayEntry) }, "Edit Workout"),
-            e("button", { className: "btn btn-dark", onClick: () => startTracking(todayWId) }, "Track Again"),
+            e("button", { className: "btn btn-accent", style: { flex: 1 }, onClick: () => editWorkout(todayEntry) }, "Edit"),
+            e("button", { className: "btn btn-dark", onClick: () => startTracking(todayWId) }, "+ New Session"),
           ),
         ] : [
           // ── Not yet tracked ──
@@ -1266,6 +1285,20 @@
     const w = state.workouts[s.workoutId];
     const [showSwap, setShowSwap] = useState(null);
 
+    // Previous weights per exercise from history (for ghost placeholders)
+    const prevWeights = useMemo(() => {
+      const pw = {};
+      state.history.slice().reverse().forEach(h => {
+        h.exercises.forEach(ex => {
+          if (!pw[ex.name]) {
+            const weights = ex.sets.filter(st => !st.warmup && st.weight > 0).map(st => st.weight);
+            if (weights.length > 0) pw[ex.name] = weights;
+          }
+        });
+      });
+      return pw;
+    }, [state.history]);
+
     const updSet = (ei, si, f, v) => {
       const patch = typeof f === "object" ? f : {[f]:v};
       const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,sets:ex.sets.map((st,j)=>j!==si?st:{...st,...patch})});
@@ -1311,7 +1344,7 @@
             : e("p", { style: { fontSize: 12, color: "#52525b" } }, "No alternatives defined."),
         ),
         // Header row
-        e("div", { style: { display: "grid", gridTemplateColumns: "24px 1fr 56px 110px 24px", gap: 4, marginBottom: 4 } },
+        e("div", { style: { display: "grid", gridTemplateColumns: "24px 72px 56px 1fr 24px", gap: 4, marginBottom: 4 } },
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
           e("div", { style: { fontSize: 10, color: "#71717a" } }, state.weightUnit),
           e("div", { style: { fontSize: 10, color: "#71717a" } }, "Reps"),
@@ -1321,10 +1354,11 @@
         ex.sets.map((set, si) => {
           const rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToRir(set.effort) : 2);
           const isWarmup = set.warmup || rir === 3;
-          return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "24px 1fr 56px 110px 24px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
+          const ghostW = (prevWeights[ex.name] || [])[si];
+          return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "24px 72px 56px 1fr 24px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
             e("div", { style: { fontSize: 12, color: "#71717a" } }, si+1),
-            e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
-            e("input", { name: "setReps", type: "number", min: 0, value: set.reps, onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
+            e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight || "", placeholder: ghostW ? String(ghostW) : state.weightUnit, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
+            e("input", { name: "setReps", type: "number", min: 0, value: set.reps || "", placeholder: "reps", onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%" } }),
             e("div", { className: "rir-pills" },
               RIR_OPTIONS.map(opt => e("button", { key: opt.value, className: "rir-pill", style: { background: rir===opt.value ? opt.color : "#27272a", color: rir===opt.value ? (opt.value===3?"#a1a1aa":"#000") : "#52525b" }, onClick: () => updSet(ei,si,{rir:opt.value,warmup:opt.value===3}) }, opt.short))
             ),
