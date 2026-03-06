@@ -1975,11 +1975,12 @@
         name:name,cat:getExerciseCategory(name)||"Other",e1rm:pr.e1rm,weight:pr.weight,reps:pr.reps,date:pr.date,
         delta:pr.prevE1rm>0?pr.e1rm-pr.prevE1rm:0,isRecent:pr.date>=cutStr
       }));
-      var recent=all.filter(p=>p.isRecent).sort((a,b)=>b.e1rm-a.e1rm);
+      var recentCount=all.filter(p=>p.isRecent).length;
       var grouped={};all.forEach(p=>{if(!grouped[p.cat])grouped[p.cat]=[];grouped[p.cat].push(p);});
-      Object.values(grouped).forEach(g=>g.sort((a,b)=>b.e1rm-a.e1rm));
+      // Sort each group: recent first (by date desc), then rest by e1rm desc
+      Object.values(grouped).forEach(g=>g.sort((a,b)=>{if(a.isRecent&&!b.isRecent)return -1;if(!a.isRecent&&b.isRecent)return 1;return b.e1rm-a.e1rm;}));
       var groupOrder=Object.keys(grouped).sort((a,b)=>(grouped[b][0]||{}).e1rm-(grouped[a][0]||{}).e1rm);
-      return{recent:recent,grouped:grouped,groupOrder:groupOrder,total:all.length};
+      return{recentCount:recentCount,grouped:grouped,groupOrder:groupOrder,total:all.length};
     },[state.history]);
 
     if (state.history.length === 0) return e("div", { style: { padding: 16 } },
@@ -2067,41 +2068,29 @@
         ) :
           e("p", { style: { color: "#52525b", fontSize: 13, textAlign: "center", padding: "24px 0" } }, "Select an exercise to see trends"),
       ),
-      // Recent PRs (last 14 days)
-      prData.recent.length > 0 && e("div", { className: "card" },
-        e("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
-          e("span", { style: { fontSize: 16 } }, "\uD83D\uDD25"),
-          e("div", { className: "label", style: { margin: 0 } }, "Recent PRs"),
-          e("span", { style: { fontSize: 11, color: "#52525b" } }, "Last 14 days"),
-        ),
-        prData.recent.map(pr => e("div", { key: pr.name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "linear-gradient(135deg, rgba(34,211,238,0.1), rgba(249,115,22,0.1))", borderRadius: 8, padding: "8px 12px", marginBottom: 6, border: "1px solid rgba(34,211,238,0.2)" } },
-          e("div", null,
-            e("div", { style: { fontSize: 13, fontWeight: 600, color: "#e4e4e7" } }, pr.name),
-            e("div", { style: { fontSize: 11, color: "#71717a" } }, pr.cat),
-          ),
-          e("div", { style: { textAlign: "right" } },
-            e("div", { style: { display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" } },
-              e("span", { style: { fontSize: 15, fontWeight: 700, color: "#22d3ee" } }, pr.e1rm + " " + state.weightUnit),
-              e("span", { style: { fontSize: 9, color: "#52525b", fontWeight: 400 } }, "e1RM"),
-              pr.delta > 0 && e("span", { style: { fontSize: 11, fontWeight: 600, color: "#22c55e" } }, "+" + pr.delta),
-            ),
-            e("div", { style: { fontSize: 11, color: "#71717a" } }, pr.weight + " \u00D7 " + pr.reps + " \u00B7 " + pr.date),
-          ),
-        )),
-      ),
-      // PRs grouped by muscle
+      // Personal Records (unified)
       prData.total > 0 && e("div", { className: "card" },
-        e("div", { className: "label", style: { marginBottom: 12 } }, "Personal Records by Muscle Group"),
-        prData.groupOrder.map(cat => e("div", { key: cat, style: { marginBottom: 16 } },
-          e("div", { style: { fontSize: 12, fontWeight: 600, color: "#f97316", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 } }, cat),
-          prData.grouped[cat].map(pr => e("div", { key: pr.name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(63,63,70,0.5)", borderRadius: 8, padding: "8px 12px", marginBottom: 4 } },
-            e("span", { style: { fontSize: 13, color: "#e4e4e7" } }, pr.name),
-            e("div", { style: { textAlign: "right", display: "flex", alignItems: "center", gap: 8 } },
-              pr.delta > 0 && e("span", { style: { fontSize: 11, fontWeight: 600, color: "#22c55e" } }, "+" + pr.delta),
-              e("div", null,
-                e("div", { style: { fontSize: 14, fontWeight: 700, color: "#22d3ee" } }, pr.e1rm + " " + state.weightUnit),
-                e("div", { style: { fontSize: 10, color: "#52525b" } }, pr.weight + " \u00D7 " + pr.reps),
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          e("div", { className: "label", style: { margin: 0 } }, "Personal Records"),
+          e("span", { style: { fontSize: 10, color: "#52525b" } }, "est. 1RM \u00B7 Epley"),
+        ),
+        prData.recentCount > 0 && e("div", { style: { fontSize: 11, color: "#22c55e", marginBottom: 8 } }, "\uD83D\uDD25 " + prData.recentCount + " new in last 14 days"),
+        prData.groupOrder.map(cat => e("div", { key: cat, style: { marginBottom: 14 } },
+          e("div", { style: { fontSize: 11, fontWeight: 600, color: "#f97316", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 } }, cat),
+          prData.grouped[cat].map(pr => e("div", { key: pr.name, style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: pr.isRecent ? "linear-gradient(135deg, rgba(34,211,238,0.06), rgba(249,115,22,0.06))" : "rgba(63,63,70,0.5)", borderRadius: 8, padding: "8px 12px", marginBottom: 4, borderLeft: pr.isRecent ? "3px solid #22d3ee" : "3px solid transparent" } },
+            e("div", { style: { minWidth: 0, flex: 1 } },
+              e("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                e("span", { style: { fontSize: 13, fontWeight: pr.isRecent ? 600 : 400, color: "#e4e4e7" } }, pr.name),
+                pr.isRecent && e("span", { style: { fontSize: 8, fontWeight: 700, color: "#22d3ee", background: "rgba(34,211,238,0.15)", padding: "1px 5px", borderRadius: 3, textTransform: "uppercase", letterSpacing: 0.5 } }, "new"),
               ),
+              e("div", { style: { fontSize: 10, color: "#52525b" } }, pr.weight + " \u00D7 " + pr.reps + " \u00B7 " + pr.date),
+            ),
+            e("div", { style: { textAlign: "right", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 } },
+              e("div", null,
+                e("span", { style: { fontSize: 14, fontWeight: 700, color: "#22d3ee" } }, pr.e1rm),
+                e("span", { style: { fontSize: 10, color: "#71717a", marginLeft: 3 } }, state.weightUnit),
+              ),
+              pr.delta > 0 && e("span", { style: { fontSize: 11, fontWeight: 600, color: "#22c55e" } }, "+" + pr.delta),
             ),
           )),
         )),
