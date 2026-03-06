@@ -74,6 +74,13 @@
     .move-btn:hover:not(:disabled) { background: #3f3f46; color: #e4e4e7; border-color: #52525b; }
     .move-btn:active:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
     .move-btn:disabled { opacity: 0.25; cursor: default; }
+    /* NumericStepper */
+    .nst { display: flex; align-items: center; background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: 100%; height: 34px; transition: border-color 0.15s; }
+    .nst:focus-within { border-color: var(--accent); }
+    .nst-btn { flex: 0 0 26px; height: 100%; background: none; border: none; color: #71717a; font-size: 15px; font-weight: 700; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; transition: background 0.1s, color 0.1s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+    .nst-btn:active { background: rgba(249,115,22,0.18); color: #f97316; }
+    .nst-input { flex: 1; min-width: 0; height: 100%; background: none; border: none; outline: none; color: #fff; font-size: 13px; font-weight: 600; text-align: center; padding: 0; }
+    .nst-input::placeholder { color: #52525b; font-weight: 400; }
   </style>
 </head>
 <body>
@@ -90,7 +97,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.47.0";
+  const APP_VERSION = "2.48.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -957,6 +964,103 @@
   });
 
   // ═══════════════════════════════════════════════════════════════════
+  // NUMERIC STEPPER
+  // Inline +/- stepper with direct-type support. ONE tap changes the value.
+  // - Tap −/+ to decrement/increment by `step`.
+  // - Tap the number to focus it; all text is selected so you just type.
+  // - Works with keyboard (arrow keys also step while focused).
+  // - Fits any grid cell; the touch targets extend to full cell height.
+  // ═══════════════════════════════════════════════════════════════════
+  function NumericStepper({ value, onChange, step, min, max, placeholder, name, inputMode }) {
+    const inputRef = useRef(null);
+    // Local string state so the user can type freely (e.g. "1" before "135")
+    const [text, setText] = useState(value > 0 ? String(value) : "");
+
+    // Keep display in sync when parent value changes from outside (e.g. copy-down)
+    useEffect(() => {
+      setText(value > 0 ? String(value) : "");
+    }, [value]);
+
+    const commit = (raw) => {
+      const n = parseFloat(raw);
+      if (!isNaN(n) && n >= 0) onChange(n);
+      else if (raw === "" || raw === "0") onChange(0);
+    };
+
+    const step_ = step || 1;
+    const min_ = min !== undefined ? min : 0;
+
+    const decrement = (ev) => {
+      ev.preventDefault();
+      const cur = parseFloat(text) || 0;
+      const next = Math.max(min_, Math.round((cur - step_) * 100) / 100);
+      setText(next > 0 ? String(next) : "");
+      onChange(next);
+    };
+
+    const increment = (ev) => {
+      ev.preventDefault();
+      const cur = parseFloat(text) || 0;
+      const next = max !== undefined
+        ? Math.min(max, Math.round((cur + step_) * 100) / 100)
+        : Math.round((cur + step_) * 100) / 100;
+      setText(String(next));
+      onChange(next);
+    };
+
+    const handleFocus = (ev) => {
+      var el = ev.target;
+      el.select();
+      // iOS/Android sometimes undo select() during the tap — retry after a tick
+      setTimeout(function() { el.select(); }, 0);
+    };
+
+    const handleChange = (ev) => {
+      const raw = ev.target.value;
+      // Allow digits, one decimal point, empty string
+      if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
+        setText(raw);
+        commit(raw);
+      }
+    };
+
+    const handleKeyDown = (ev) => {
+      if (ev.key === "ArrowUp") { ev.preventDefault(); increment(ev); }
+      if (ev.key === "ArrowDown") { ev.preventDefault(); decrement(ev); }
+    };
+
+    return e("div", { className: "nst" },
+      e("button", {
+        className: "nst-btn",
+        onPointerDown: decrement,
+        tabIndex: -1,
+        "aria-label": "decrease",
+        type: "button",
+      }, "\u2212"),
+      e("input", {
+        ref: inputRef,
+        className: "nst-input",
+        name: name,
+        type: "text",
+        inputMode: inputMode || "decimal",
+        pattern: "[0-9]*\\.?[0-9]*",
+        value: text,
+        placeholder: placeholder || "",
+        onFocus: handleFocus,
+        onChange: handleChange,
+        onKeyDown: handleKeyDown,
+      }),
+      e("button", {
+        className: "nst-btn",
+        onPointerDown: increment,
+        tabIndex: -1,
+        "aria-label": "increase",
+        type: "button",
+      }, "\u002B"),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // DASHBOARD
   // ═══════════════════════════════════════════════════════════════════
   function Dashboard({ state, dispatch }) {
@@ -1022,11 +1126,14 @@
     };
     const latestWeight = state.weightLog.length > 0 ? state.weightLog[state.weightLog.length - 1] : null;
 
-    const renderPastEntry = (entry, idx) => {
+    const renderPastEntry = (entry, idx, showEdit) => {
       const stats = getWorkoutStats(entry);
       return e("div", { key: (idx !== undefined ? idx : "last") + entry.date, style: { borderTop: "1px solid #27272a", paddingTop: 10, marginTop: 10 } },
         e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
-          e("div", { style: { fontWeight: 600, fontSize: 14 } }, entry.workoutName),
+          e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+            e("div", { style: { fontWeight: 600, fontSize: 14 } }, entry.workoutName),
+            showEdit && e("button", { style: { background: "#3f3f46", border: "none", borderRadius: 6, padding: "2px 8px", fontSize: 11, color: "#a1a1aa", cursor: "pointer" }, onClick: () => editWorkout(entry) }, "Edit"),
+          ),
           e("div", { style: { fontSize: 11, color: "#71717a" } }, entry.date),
         ),
         renderWorkoutStats(stats),
@@ -1081,7 +1188,18 @@
     const startTracking = (wid, isOverride) => {
       const w = state.workouts[wid]; if (!w) return;
       if (isOverride) dispatch({type:"OVERRIDE_TODAY",newWorkoutId:wid});
-      dispatch({type:"START_TRACKING",session:{workoutId:wid,wasOverride:!!isOverride,exercises:w.exercises.map(ex=>({exerciseId:ex.id,name:ex.name,sets:Array.from({length:ex.sets},()=>({reps:ex.defaultReps,weight:0,rir:2,warmup:false}))}))}});
+      // Pre-fill from previous session's values for each exercise
+      var prevByName = {};
+      state.history.slice().reverse().forEach(function(h) {
+        h.exercises.forEach(function(ex) { if (!prevByName[ex.name]) prevByName[ex.name] = ex.sets; });
+      });
+      dispatch({type:"START_TRACKING",session:{workoutId:wid,wasOverride:!!isOverride,exercises:w.exercises.map(ex => {
+        var prev = prevByName[ex.name];
+        return {exerciseId:ex.id,name:ex.name,sets:Array.from({length:ex.sets},(_, si) => {
+          var ps = prev && prev[si];
+          return ps ? {reps:ps.reps||ex.defaultReps,weight:ps.weight||0,rir:ps.rir!==undefined?ps.rir:2,warmup:!!ps.warmup} : {reps:ex.defaultReps,weight:0,rir:2,warmup:false};
+        })};
+      })}});
       setShowOverride(false);
     };
     const editWorkout = (entry) => {
@@ -1111,48 +1229,51 @@
           e("div", { className: "stat-label" }, dashStats.streak === 1 ? "week streak" : "week streak"),
         ),
       ),
-      // Today's workout
-      alreadyTracked ? e("div", { className: "card", style: { borderLeft: "3px solid #4ade80" } },
-        // ── Completed summary (works whether cadence advanced or not) ──
-        e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 10 } },
-          e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-            e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayEntry.workoutName || (state.workouts[todayEntry.workoutId]||{}).name || "Workout"),
-            e("div", { style: { background: "rgba(22,101,52,0.6)", borderRadius: 6, padding: "3px 8px" } },
-              e("span", { style: { color: "#4ade80", fontSize: 12, fontWeight: 600 } }, "\u2713 Done"),
+      // Cadence preview (Split) — 7-day view
+      state.scheduleType === "cadence" && state.cadenceSchedule.rotation.length > 0 && (() => {
+        var rot = state.cadenceSchedule.rotation, len = rot.length;
+        var curIdx = state.cadenceSchedule.currentIndex % len;
+        var _today = new Date(), _ds = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+        // Build 7-day window: 3 past + today + 3 future
+        var days = [];
+        for (var di = -3; di <= 3; di++) {
+          var d = new Date(_today); d.setDate(_today.getDate() + di);
+          var rotIdx = ((curIdx + di) % len + len) % len;
+          var slot = rot[rotIdx];
+          var w = slot && slot.workoutId ? state.workouts[slot.workoutId] : null;
+          var dateStr = toDateStr(d);
+          var tracked = state.history.some(function(h) { return h.date === dateStr; });
+          var trackedName = di === 0 && todayEntry ? (todayEntry.workoutName || (state.workouts[todayEntry.workoutId]||{}).name || "Workout") : tracked ? (state.history.find(function(h) { return h.date === dateStr; }) || {}).workoutName : null;
+          days.push({ di: di, day: _ds[d.getDay()], w: w, isCur: di === 0, isPast: di < 0, tracked: tracked, trackedName: trackedName, label: w ? w.name : "Rest" });
+        }
+        return e("div", { className: "card", style: { padding: "10px 14px" } },
+          e("div", { style: { display: "flex", alignItems: "center", gap: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" } },
+            e("div", { style: { flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" } },
+              e("span", { style: { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: "#71717a" } }, "Split"),
+              e("span", { style: { fontSize: 11, color: "#a1a1aa", fontWeight: 600 } }, (curIdx + 1) + "/" + len),
+            ),
+            e("div", { style: { width: 1, height: 32, background: "#3f3f46", flexShrink: 0 } }),
+            e("div", { style: { display: "flex", gap: 6, flex: 1, justifyContent: "space-between" } },
+              days.map(function(dd) {
+                var done = dd.isCur ? alreadyTracked : dd.isPast && dd.tracked;
+                var missed = dd.isPast && !dd.tracked && dd.w;
+                var pillLabel = done && dd.trackedName ? dd.trackedName : dd.label;
+                var pillBg = done ? "#166534" : dd.isCur ? "#f97316" : dd.w ? "#3f3f46" : "rgba(63,63,70,0.4)";
+                var pillColor = done ? "#4ade80" : dd.isCur ? "#fff" : dd.w ? "#d4d4d8" : "#52525b";
+                var dayColor = done ? "#4ade80" : dd.isCur ? "#f97316" : "#52525b";
+                if (missed) { pillColor = "#71717a"; }
+                return e("div", { key: dd.di, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flexShrink: 0, minWidth: 0, flex: 1 } },
+                  e("span", { style: { fontSize: 9, color: dayColor, fontWeight: dd.isCur ? 700 : 400 } }, dd.isCur ? "Today" : dd.day),
+                  e("span", { style: { fontSize: 10, padding: "3px 6px", borderRadius: 9999, background: pillBg, color: pillColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", display: "block", textAlign: "center", outline: done ? "2px solid rgba(74,222,128,0.3)" : dd.isCur ? "2px solid rgba(249,115,22,0.3)" : "none", outlineOffset: 1 } }, pillLabel),
+                  dd.isPast && e("span", { style: { fontSize: 7, marginTop: 1 } }, done ? "\u2713" : missed ? "\u2717" : ""),
+                );
+              })
             ),
           ),
-          (() => {
-            var nextDay = null, nextW = null;
-            if (state.scheduleType === "weekly") {
-              var todayIdx = DAYS.indexOf(todayDay());
-              for (var di = 1; di <= 7; di++) {
-                var idx = (todayIdx + di) % 7;
-                var slot = state.weeklySchedule.find(s => s.day === DAYS[idx]);
-                if (slot && slot.workoutId && state.workouts[slot.workoutId]) {
-                  nextDay = di === 1 ? "Tomorrow" : DAY_LABELS[DAYS[idx]];
-                  nextW = state.workouts[slot.workoutId].name;
-                  break;
-                }
-              }
-            } else if (state.cadenceSchedule.rotation.length > 0) {
-              for (var ci = 0; ci < state.cadenceSchedule.rotation.length; ci++) {
-                var ni = (state.cadenceSchedule.currentIndex + ci) % state.cadenceSchedule.rotation.length;
-                var ns = state.cadenceSchedule.rotation[ni];
-                if (ns && ns.workoutId && state.workouts[ns.workoutId]) {
-                  nextDay = "Next"; nextW = state.workouts[ns.workoutId].name;
-                  break;
-                }
-              }
-            }
-            return nextW ? e("div", { style: { textAlign: "right" } },
-              e("div", { style: { fontSize: 10, color: "#71717a" } }, "Up next"),
-              e("div", { style: { fontSize: 13, fontWeight: 600, color: "#f97316" } }, nextDay + " " + nextW),
-            ) : null;
-          })(),
-        ),
-        e("div", { key: "s", style: { marginBottom: 10 } }, renderWorkoutStats(getWorkoutStats(todayEntry))),
-        e("button", { key: "b", className: "btn btn-accent", style: { width: "100%" }, onClick: () => editWorkout(todayEntry) }, "Edit Workout"),
-      ) : e("div", { className: "card" },
+        );
+      })(),
+      // Today's workout (only shown when not yet tracked)
+      !alreadyTracked && e("div", { className: "card" },
         todayW ? [
           // ── Not yet tracked ──
           e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 } },
@@ -1202,15 +1323,15 @@
         ),
       ),
       // Recent workouts
-      state.history.length > 0 && e("div", { className: "card" },
+      state.history.length > 0 && e("div", { className: "card", style: alreadyTracked ? { borderLeft: "3px solid #4ade80" } : undefined },
         e("button", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer" }, onClick: () => setShowPast(!showPast) },
           e("div", { className: "label", style: { margin: 0 } }, "Recent Workouts"),
-          e("span", { style: { fontSize: 12, color: "#71717a" } }, showPast ? "\u25B2" : "\u25BC"),
+          e("span", { style: { fontSize: 12, color: "#71717a" } }, (showPast || alreadyTracked) ? "\u25B2" : "\u25BC"),
         ),
-        // Always show last workout
-        reversedHistory.length > 0 && renderPastEntry(reversedHistory[0]),
-        // Expanded: show more past workouts
-        showPast && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
+        // Always show last workout — with Edit button if it's today's
+        reversedHistory.length > 0 && renderPastEntry(reversedHistory[0], undefined, reversedHistory[0].date === todayStr),
+        // Expanded: show more past workouts (auto-expand when today tracked)
+        (showPast || alreadyTracked) && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
       ),
       // Week preview
       state.scheduleType === "weekly" && e("div", { className: "card" },
@@ -1222,17 +1343,6 @@
               e("div", { style: { fontWeight: 500, color: isToday ? "#f97316" : "#d4d4d8" } }, DAY_LABELS[slot.day]),
               e("div", { style: { marginTop: 4, color: w ? "#e4e4e7" : "#52525b" } }, w ? w.name.slice(0,5) : "Rest"),
             );
-          })
-        ),
-      ),
-      // Cadence preview
-      state.scheduleType === "cadence" && state.cadenceSchedule.rotation.length > 0 && e("div", { className: "card" },
-        e("div", { className: "label" }, "Cycle"),
-        e("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
-          state.cadenceSchedule.rotation.map((slot, i) => {
-            const cur = i === state.cadenceSchedule.currentIndex % state.cadenceSchedule.rotation.length;
-            const w = slot.workoutId ? state.workouts[slot.workoutId] : null;
-            return e("span", { key: i, className: "pill", style: { background: cur ? "#f97316" : w ? "#3f3f46" : "rgba(63,63,70,0.5)", color: cur ? "#fff" : w ? "#d4d4d8" : "#52525b" } }, w ? w.name : "Rest");
           })
         ),
       ),
@@ -1305,7 +1415,7 @@ null,
           ),
           // Rotation
           e("div", { className: "card" },
-            e("div", { className: "label" }, "Cycle Order"),
+            e("div", { className: "label" }, "Split Order"),
             state.cadenceSchedule.rotation.length === 0 && e("p", { className: "text-muted", style: { fontSize: 13, marginBottom: 12 } }, "Add workouts to build your cycle."),
             e("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 } },
               state.cadenceSchedule.rotation.map((slot, i) => {
@@ -1700,8 +1810,8 @@ null,
               const ghostW = (prevWeights[ex.name] || [])[si];
               return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 132px 20px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
                 e("div", { style: { fontSize: 12, color: "#71717a", textAlign: "center" } }, si+1),
-                e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight || "", placeholder: ghostW ? String(ghostW) : state.weightUnit, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%", textAlign: "center" } }),
-                e("input", { name: "setReps", type: "number", min: 0, value: set.reps || "", placeholder: "reps", onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%", textAlign: "center" } }),
+                e(NumericStepper, { name: "setWeight", value: set.weight || 0, onChange: v => updSet(ei,si,"weight",v), step: state.weightUnit === "kg" ? 2.5 : 5, min: 0, placeholder: ghostW ? String(ghostW) : state.weightUnit, inputMode: "decimal" }),
+                e(NumericStepper, { name: "setReps", value: set.reps || 0, onChange: v => updSet(ei,si,"reps",Math.round(v)), step: 1, min: 0, max: 99, placeholder: "reps", inputMode: "numeric" }),
                 e("div", { className: "rir-pills" },
                   RIR_OPTIONS.map(opt => e("button", { key: opt.value, className: "rir-pill", style: { background: rir===opt.value ? opt.color : "#27272a", color: rir===opt.value ? (opt.value===3?"#a1a1aa":"#000") : "#52525b" }, onClick: () => updSet(ei,si,{rir:opt.value,warmup:opt.value===3}) }, opt.short))
                 ),

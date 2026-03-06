@@ -24,11 +24,11 @@ for test_file in "$DIR"/test-*.js; do
 
   echo "$output"
 
-  # Parse results line
-  results=$(echo "$output" | grep -oP '\d+ passed, \d+ failed' | tail -1)
+  # Parse results line (compatible with macOS and Linux)
+  results=$(echo "$output" | grep -E '[0-9]+ passed, [0-9]+ failed' | tail -1)
   if [ -n "$results" ]; then
-    p=$(echo "$results" | grep -oP '^\d+')
-    f=$(echo "$results" | grep -oP '\d+ failed' | grep -oP '^\d+')
+    p=$(echo "$results" | sed 's/^[^0-9]*\([0-9][0-9]*\) passed.*/\1/')
+    f=$(echo "$results" | sed 's/.*[^0-9]*\([0-9][0-9]*\) failed.*/\1/')
     TOTAL_PASS=$((TOTAL_PASS + p))
     TOTAL_FAIL=$((TOTAL_FAIL + f))
   fi
