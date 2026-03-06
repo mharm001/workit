@@ -97,7 +97,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.49.0";
+  const APP_VERSION = "2.50.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -363,9 +363,25 @@
   const _exCatMap = {};
   Object.entries(EXERCISE_LIBRARY).forEach(([cat, exs]) => exs.forEach(ex => { _exCatMap[ex.name] = cat; }));
   const getExerciseCategory = (name) => {
+    if (!name) return null;
     if (_exCatMap[name]) return _exCatMap[name];
     var lc = name.toLowerCase();
-    for (var k in _exCatMap) { if (k.toLowerCase().startsWith(lc) || lc.startsWith(k.toLowerCase())) return _exCatMap[k]; }
+    if (!lc) return null;
+    // 1. Prefix match (either direction)
+    for (var k in _exCatMap) { var kl = k.toLowerCase(); if (kl.startsWith(lc) || lc.startsWith(kl)) return _exCatMap[k]; }
+    // 2. Substring match: "Lateral Raises" found inside "Dumbbell Lateral Raises"
+    for (var k in _exCatMap) { var kl = k.toLowerCase(); if (kl.includes(lc) || lc.includes(kl)) return _exCatMap[k]; }
+    // 3. Word overlap: all significant words in input appear in a library entry
+    var words = lc.split(/\s+/).filter(function(w) { return w.length > 2; });
+    if (words.length > 0) {
+      var best = null, bestCount = 0;
+      for (var k in _exCatMap) {
+        var kl = k.toLowerCase(), count = 0;
+        words.forEach(function(w) { if (kl.includes(w)) count++; });
+        if (count > bestCount) { bestCount = count; best = k; }
+      }
+      if (best && bestCount >= Math.max(1, Math.ceil(words.length / 2))) return _exCatMap[best];
+    }
     return null;
   };
 
@@ -1357,14 +1373,14 @@
       ),
       // Recent workouts
       state.history.length > 0 && e("div", { className: "card", style: alreadyTracked ? { borderLeft: "3px solid #4ade80" } : undefined },
-        e("button", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer" }, onClick: () => setShowPast(!showPast) },
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
           e("div", { className: "label", style: { margin: 0 } }, "Recent Workouts"),
-          e("span", { style: { fontSize: 12, color: "#71717a" } }, (showPast || alreadyTracked) ? "\u25B2" : "\u25BC"),
+          reversedHistory.length > 1 && e("button", { style: { background: "none", border: "none", padding: "4px 8px", cursor: "pointer", color: "#71717a", fontSize: 12 }, onClick: () => setShowPast(!showPast) }, showPast ? "\u25B2" : "\u25BC"),
         ),
         // Always show last workout — with Edit button if it's today's
         reversedHistory.length > 0 && renderPastEntry(reversedHistory[0], undefined, reversedHistory[0].date === todayStr),
-        // Expanded: show more past workouts (auto-expand when today tracked)
-        (showPast || alreadyTracked) && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
+        // Expanded: show older workouts
+        showPast && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
       ),
     );
   }
@@ -1473,11 +1489,15 @@ null,
     const [editing, setEditing] = useState(null);
     const [name, setName] = useState("");
     const [nameError, setNameError] = useState(false);
+    const [exError, setExError] = useState(false);
     const [targetMuscles, setTargetMuscles] = useState([]);
     const [exercises, setExercises] = useState([]);
     const [showLib, setShowLib] = useState(false);
     const [libCat, setLibCat] = useState("");
     const [showAllCats, setShowAllCats] = useState(false);
+    const [libSearch, setLibSearch] = useState("");
+    const [altPicker, setAltPicker] = useState(null); // exercise id for open alt picker
+    const [altSearch, setAltSearch] = useState("");
     const [deleteConfirmId, setDeleteConfirmId] = useState(null);
     const [dragIndex, setDragIndex] = useState(null);
     const [overIndex, setOverIndex] = useState(null);
@@ -1529,16 +1549,16 @@ null,
       setDragIndex(null); setOverIndex(null);
     };
 
-    const startNew = () => { setEditing("new"); setName(""); setNameError(false); setTargetMuscles([]); setExercises([]); setLibCat(""); setShowAllCats(false); };
-    const startEdit = w => { setEditing(w.id); setName(w.name); setNameError(false); setTargetMuscles(w.targetMuscles||[]); setExercises(w.exercises.map(x=>({...x}))); setLibCat(""); setShowAllCats(false); };
+    const startNew = () => { setEditing("new"); setName(""); setNameError(false); setExError(false); setTargetMuscles([]); setExercises([]); setLibCat(""); setShowAllCats(false); };
+    const startEdit = w => { setEditing(w.id); setName(w.name); setNameError(false); setExError(false); setTargetMuscles(w.targetMuscles||[]); setExercises(w.exercises.map(x=>({...x}))); setLibCat(""); setShowAllCats(false); };
     const toggleMuscle = cat => { setTargetMuscles(prev => prev.includes(cat) ? prev.filter(c=>c!==cat) : [...prev,cat]); setLibCat(""); setShowAllCats(false); };
-    const addEx = ex => setExercises([...exercises, { id: uid(), name: ex.name, sets: ex.defaultSets, defaultReps: ex.defaultReps, alternatives: [] }]);
-    const addCustom = () => setExercises([...exercises, { id: uid(), name: "New Exercise", sets: 3, defaultReps: 10, alternatives: [] }]);
+    const addEx = ex => { setExercises([...exercises, { id: uid(), name: ex.name, sets: ex.defaultSets, defaultReps: ex.defaultReps, alternatives: [] }]); setExError(false); };
+    const addCustom = () => setExercises([...exercises, { id: uid(), name: "", sets: 3, defaultReps: 10, alternatives: [] }]);
     const updEx = (id, f, v) => setExercises(exercises.map(x => x.id===id ? {...x,[f]:v} : x));
     const remEx = id => setExercises(exercises.filter(x => x.id!==id));
     const addAlt = (id,n) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:[...x.alternatives,n]} : x));
     const remAlt = (id,ai) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:x.alternatives.filter((_,i)=>i!==ai)} : x));
-    const save = () => { if(!name.trim()){ setNameError(true); return; } dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),targetMuscles,exercises}}); setEditing(null); };
+    const save = () => { if(!name.trim()){ setNameError(true); return; } var validEx = exercises.filter(x => x.name.trim()); if(validEx.length === 0){ setExError(true); return; } dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),targetMuscles,exercises:validEx}}); setEditing(null); };
     const del = id => { dispatch({type:"DELETE_WORKOUT",id}); if(editing===id)setEditing(null); };
     // Library categories: only show target muscles unless "Show all" is toggled
     const libCategories = targetMuscles.length > 0 && !showAllCats ? targetMuscles : ALL_MUSCLE_GROUPS;
@@ -1548,11 +1568,11 @@ null,
       return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
         e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
           e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, editing === "new" ? "New Workout" : "Edit Workout"),
-          e("button", { style: { background: "none", border: "none", color: "#a1a1aa", cursor: "pointer", fontSize: 13 }, onClick: () => setEditing(null) }, "Cancel"),
+          e("button", { style: { background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#ef4444", cursor: "pointer", fontSize: 13, padding: "6px 14px", fontWeight: 600 }, onClick: () => setEditing(null) }, "Cancel"),
         ),
         e("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
           e("input", { name: "workoutName", type: "text", placeholder: "Workout name", value: name, onInput: ev => { setName(ev.target.value); if(ev.target.value.trim())setNameError(false); }, className: "input", style: { padding: 12, fontSize: 16, borderColor: nameError ? "#ef4444" : "" } }),
-          nameError && e("span", { style: { fontSize: 12, color: "#ef4444", paddingLeft: 2 } }, "A workout name is required"),
+          nameError && e("div", { style: { fontSize: 12, color: "#ef4444", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 6, padding: "6px 10px", marginTop: 4 } }, "Give your workout a name"),
         ),
         // Target muscle groups
         e("div", null,
@@ -1565,20 +1585,21 @@ null,
         e("button", { className: "btn btn-ghost", style: { width: "100%" }, onClick: () => setShowLib(!showLib) }, "+ Add from Library"),
         showLib && e("div", { className: "card" },
           e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
-            libCategories.map(cat => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: activeLibCat===cat?"#f97316": targetMuscles.includes(cat)?"#52341a":"#3f3f46", color: activeLibCat===cat?"#fff": targetMuscles.includes(cat)?"#f97316":"#a1a1aa", fontWeight: targetMuscles.includes(cat)?600:400 }, onClick: () => setLibCat(cat) }, cat))
+            libCategories.map(cat => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: activeLibCat===cat?"#f97316": targetMuscles.includes(cat)?"#52341a":"#3f3f46", color: activeLibCat===cat?"#fff": targetMuscles.includes(cat)?"#f97316":"#a1a1aa", fontWeight: targetMuscles.includes(cat)?600:400 }, onClick: () => { setLibCat(cat); setLibSearch(""); } }, cat))
           ),
           targetMuscles.length > 0 && e("div", { style: { marginBottom: 8 } },
             e("button", { style: { background: "none", border: "none", color: "#71717a", fontSize: 11, cursor: "pointer", textDecoration: "underline" }, onClick: () => setShowAllCats(!showAllCats) }, showAllCats ? "Show only target muscles" : "Show all muscles")
           ),
+          e("input", { type: "text", placeholder: "Search exercises...", value: libSearch, onInput: ev => setLibSearch(ev.target.value), className: "input", style: { marginBottom: 8, fontSize: 13 } }),
           e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
-            (EXERCISE_LIBRARY[activeLibCat]||[]).map(ex => e("button", { key: ex.name, className: "lib-exercise-btn", onClick: () => addEx(ex) },
+            (EXERCISE_LIBRARY[activeLibCat]||[]).filter(function(ex) { return !libSearch || ex.name.toLowerCase().includes(libSearch.toLowerCase()); }).map(ex => e("button", { key: ex.name, className: "lib-exercise-btn", onClick: () => addEx(ex) },
               ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"×"+ex.defaultReps),
             ))
           ),
         ),
-        e("button", { className: "btn btn-ghost", style: { width: "100%", marginTop: 8 }, onClick: addCustom }, "+ Add Custom Exercise"),
-        e("div", { className: "label" }, "Exercises"),
-        e("div", { className: "ex-drag-list", style: { display: "flex", flexDirection: "column", gap: 12 } },
+        !showLib && e("button", { className: "btn btn-ghost", style: { width: "100%", marginTop: 8 }, onClick: () => { setShowLib(false); addCustom(); } }, "+ Add Custom Exercise"),
+        !showLib && e("div", { className: "label" }, "Exercises"),
+        !showLib && e("div", { className: "ex-drag-list", style: { display: "flex", flexDirection: "column", gap: 12 } },
         exercises.map((ex, idx) => e("div", {
           key: ex.id,
           className: "card ex-drag-item" + (dragIndex === idx ? " ex-card-dragging" : "") + (overIndex === idx ? " ex-card-drag-over" : ""),
@@ -1607,7 +1628,7 @@ null,
               ),
             ),
             e("div", { style: { flex: 1, display: "flex", flexDirection: "column", gap: 8 } },
-              e("input", { name: "exerciseName", type: "text", value: ex.name, onInput: ev => updEx(ex.id,"name",ev.target.value), className: "input", style: { fontSize: 13 } }),
+              e("input", { name: "exerciseName", type: "text", value: ex.name, placeholder: "Exercise name", onFocus: function(ev) { ev.target.select(); }, onInput: ev => updEx(ex.id,"name",ev.target.value), className: "input", style: { fontSize: 13 }, autoFocus: !ex.name }),
               e("div", { style: { display: "flex", gap: 12 } },
                 e("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, e("span", { style:{fontSize:11,color:"#a1a1aa"} }, "Sets:"), e("input", { name:"exerciseSets", type:"number",min:1,value:ex.sets,onInput:ev=>updEx(ex.id,"sets",parseInt(ev.target.value)||1),className:"input input-sm" })),
                 e("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, e("span", { style:{fontSize:11,color:"#a1a1aa"} }, "Reps:"), e("input", { name:"exerciseReps", type:"number",min:1,value:ex.defaultReps,onInput:ev=>updEx(ex.id,"defaultReps",parseInt(ev.target.value)||1),className:"input input-sm" })),
@@ -1619,29 +1640,34 @@ null,
                     alt, e("button", { onClick: () => remAlt(ex.id, ai), style: { background:"none",border:"none",color:"#71717a",cursor:"pointer",fontSize:11 } }, "×"),
                   ))
                 ),
-                e("select", { name: "addAlternative", value: "", onChange: ev => { if(ev.target.value){addAlt(ex.id,ev.target.value);ev.target.value="";} }, style: { width: "100%", fontSize: 12 } },
-                  e("option", { value: "" }, "Add alternative..."),
-                  // Same-category exercises first (most relevant alternatives)
-                  (function(){
-                    const myCat = getExerciseCategory(ex.name);
-                    const sameCat = myCat ? (EXERCISE_LIBRARY[myCat]||[]).filter(l => l.name!==ex.name && !ex.alternatives.includes(l.name)) : [];
-                    const otherCats = Object.entries(EXERCISE_LIBRARY).filter(([cat])=>cat!==myCat).flatMap(([cat,exs])=>exs.filter(l=>l.name!==ex.name&&!ex.alternatives.includes(l.name)).map(l=>({...l,cat})));
-                    return [
-                      sameCat.length>0 && e("optgroup", { key: "same", label: myCat ? (myCat.charAt(0).toUpperCase()+myCat.slice(1)+" (same muscle)") : "Similar" },
-                        sameCat.map(l => e("option", { key: "same-"+l.name, value: l.name }, l.name))
-                      ),
-                      otherCats.length>0 && e("optgroup", { key: "other", label: "Other muscles" },
-                        otherCats.map(l => e("option", { key: "other-"+l.cat+"-"+l.name, value: l.name }, l.name+" ("+l.cat+")"))
-                      )
-                    ];
-                  })()
-                ),
+                e("button", { style: { width: "100%", textAlign: "left", padding: "8px 12px", borderRadius: 8, border: "1px solid #3f3f46", background: "#27272a", color: "#a1a1aa", fontSize: 12, cursor: "pointer" }, onClick: () => { setAltPicker(altPicker === ex.id ? null : ex.id); setAltSearch(""); } }, altPicker === ex.id ? "\u25B2 Close" : "Add alternative..."),
+                altPicker === ex.id && (function(){
+                  var exCat = getExerciseCategory(ex.name);
+                  var relevantCats = exCat ? [exCat] : targetMuscles.length > 0 ? targetMuscles.slice() : [];
+                  var relevantSet = new Set(relevantCats);
+                  var sameCat = relevantCats.flatMap(function(cat) { return (EXERCISE_LIBRARY[cat]||[]).filter(function(l) { return l.name!==ex.name && !ex.alternatives.includes(l.name); }).map(function(l) { return {name:l.name,cat:cat}; }); });
+                  var otherCats = Object.entries(EXERCISE_LIBRARY).filter(function(e) { return !relevantSet.has(e[0]); }).flatMap(function(e) { return e[1].filter(function(l) { return l.name!==ex.name && !ex.alternatives.includes(l.name); }).map(function(l) { return {name:l.name,cat:e[0]}; }); });
+                  var q = altSearch.toLowerCase();
+                  if (q) { sameCat = sameCat.filter(function(l) { return l.name.toLowerCase().includes(q); }); otherCats = otherCats.filter(function(l) { return l.name.toLowerCase().includes(q); }); }
+                  var sameLabel = relevantCats.map(function(c) { return c.charAt(0).toUpperCase()+c.slice(1); }).join(" & ");
+                  return e("div", { style: { marginTop: 6, border: "1px solid #3f3f46", borderRadius: 8, overflow: "hidden" } },
+                    e("input", { type: "text", placeholder: "Search exercises...", value: altSearch, onInput: function(ev) { setAltSearch(ev.target.value); }, className: "input", style: { fontSize: 12, borderRadius: 0, border: "none", borderBottom: "1px solid #3f3f46" }, autoFocus: true }),
+                    e("div", { style: { maxHeight: 180, overflowY: "auto" } },
+                      sameCat.length > 0 && e("div", { style: { padding: "6px 10px", fontSize: 10, color: "#71717a", textTransform: "uppercase", letterSpacing: 0.5, background: "#1c1c1e" } }, sameLabel || "Similar"),
+                      sameCat.map(function(l) { return e("button", { key: "s-"+l.cat+"-"+l.name, className: "lib-exercise-btn", style: { fontSize: 12 }, onClick: function() { addAlt(ex.id, l.name); } }, l.name); }),
+                      otherCats.length > 0 && sameCat.length > 0 && e("div", { style: { padding: "6px 10px", fontSize: 10, color: "#71717a", textTransform: "uppercase", letterSpacing: 0.5, background: "#1c1c1e" } }, "Other muscles"),
+                      otherCats.slice(0, 30).map(function(l) { return e("button", { key: "o-"+l.cat+"-"+l.name, className: "lib-exercise-btn", style: { fontSize: 12 }, onClick: function() { addAlt(ex.id, l.name); } }, l.name + " (" + l.cat + ")"); }),
+                      sameCat.length === 0 && otherCats.length === 0 && altSearch && e("div", { style: { padding: "12px", textAlign: "center", color: "#52525b", fontSize: 12 } }, "No matches"),
+                    ),
+                  );
+                })(),
               ),
             ),
             e("button", { onClick: () => remEx(ex.id), style: { background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,paddingTop:4 } }, "✕"),
           ),
         ))),
-        e("button", { className: "btn btn-accent", style: { width: "100%", padding: 14, marginTop: 8 }, onClick: save }, "Save Workout"),
+        !showLib && exError && e("div", { style: { fontSize: 12, color: "#ef4444", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 6, padding: "6px 10px", marginTop: 8 } }, "Add at least one exercise to save"),
+        !showLib && e("button", { className: "btn btn-accent", style: { width: "100%", padding: 14, marginTop: 8 }, onClick: save }, "Save Workout"),
       );
     }
 
@@ -2022,8 +2048,8 @@ null,
           );
         })(),
       ),
-      // Exercise progress
-      e("div", { className: "card" },
+      // Exercise progress (only show when there's enough data)
+      allEx.length > 0 && state.history.length >= 2 && e("div", { className: "card" },
         e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
           e("div", { className: "label", style: { margin: 0 } }, "Exercise Progress"),
           e("select", { name: "filterExercise", value: selEx, onChange: ev => setSelEx(ev.target.value), style: { fontSize: 12 } },
@@ -2063,6 +2089,7 @@ null,
           e("div", { style: { textAlign: "right" } },
             e("div", { style: { display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" } },
               e("span", { style: { fontSize: 15, fontWeight: 700, color: "#22d3ee" } }, pr.e1rm + " " + state.weightUnit),
+              e("span", { style: { fontSize: 9, color: "#52525b", fontWeight: 400 } }, "e1RM"),
               pr.delta > 0 && e("span", { style: { fontSize: 11, fontWeight: 600, color: "#22c55e" } }, "+" + pr.delta),
             ),
             e("div", { style: { fontSize: 11, color: "#71717a" } }, pr.weight + " \u00D7 " + pr.reps + " \u00B7 " + pr.date),
