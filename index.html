@@ -97,7 +97,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.48.0";
+  const APP_VERSION = "2.49.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -340,7 +340,7 @@
   const DAY_LABELS = {monday:"Mon",tuesday:"Tue",wednesday:"Wed",thursday:"Thu",friday:"Fri",saturday:"Sat",sunday:"Sun"};
   // Module-level: called on every render in multiple components — no allocation benefit to inlining
   const todayDay = () => DAYS[new Date().getDay()===0?6:new Date().getDay()-1];
-  const toDateStr = (d) => d.toISOString().split("T")[0];
+  const toDateStr = (d) => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
   // Module-level fast hash: sum char codes of up to 200 chars + length suffix.
   // Defined here (not inside App) so it is never recreated per render.
   const _quickHash = (s) => { var h=0; for(var i=0;i<Math.min(s.length,200);i++) h=(h*31+s.charCodeAt(i))|0; return h+":"+s.length; };
@@ -1229,16 +1229,52 @@
           e("div", { className: "stat-label" }, dashStats.streak === 1 ? "week streak" : "week streak"),
         ),
       ),
+      // Weekly schedule tile
+      state.scheduleType === "weekly" && e("div", { className: "card", style: { padding: "10px 14px" } },
+        e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+          e("span", { style: { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: "#71717a", flexShrink: 0 } }, "Week"),
+          e("div", { style: { width: 1, height: 32, background: "#3f3f46", flexShrink: 0 } }),
+          e("div", { style: { display: "flex", gap: 4, flex: 1, justifyContent: "space-between" } },
+            state.weeklySchedule.map(function(slot) {
+              var isToday = slot.day === todayDay();
+              var w = slot.workoutId ? state.workouts[slot.workoutId] : null;
+              var dateForDay = (function() {
+                var t = new Date(), tIdx = DAYS.indexOf(todayDay()), sIdx = DAYS.indexOf(slot.day);
+                var diff = sIdx - tIdx;
+                var d = new Date(t); d.setDate(t.getDate() + diff);
+                return d;
+              })();
+              var dateStr = toDateStr(dateForDay);
+              var isPast = !isToday && DAYS.indexOf(slot.day) < DAYS.indexOf(todayDay());
+              var tracked = state.history.some(function(h) { return h.date === dateStr; });
+              var done = isToday ? alreadyTracked : isPast && tracked;
+              var missed = isPast && !tracked && w;
+              var pillBg = done ? "#166534" : isToday ? "#f97316" : w ? "#3f3f46" : "rgba(63,63,70,0.4)";
+              var pillColor = done ? "#4ade80" : isToday ? "#fff" : w ? "#d4d4d8" : "#52525b";
+              var dayColor = done ? "#4ade80" : isToday ? "#f97316" : "#52525b";
+              if (missed) pillColor = "#71717a";
+              return e("div", { key: slot.day, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flex: 1, minWidth: 0 } },
+                e("span", { style: { fontSize: 9, color: dayColor, fontWeight: isToday ? 700 : 400 } }, isToday ? "Today" : DAY_LABELS[slot.day]),
+                e("span", { style: { fontSize: 10, padding: "3px 4px", borderRadius: 9999, background: pillBg, color: pillColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", display: "block", textAlign: "center", outline: done ? "2px solid rgba(74,222,128,0.3)" : isToday ? "2px solid rgba(249,115,22,0.3)" : "none", outlineOffset: 1 } }, w ? w.name.slice(0,5) : "Rest"),
+                (isPast || isToday) && (done ? e("span", { style: { fontSize: 9, marginTop: 1, color: "#4ade80" } }, "\u2713") : missed ? e("span", { style: { fontSize: 9, marginTop: 1, color: "#ef4444" } }, "\u2717") : null),
+              );
+            })
+          ),
+        ),
+      ),
       // Cadence preview (Split) — 7-day view
       state.scheduleType === "cadence" && state.cadenceSchedule.rotation.length > 0 && (() => {
         var rot = state.cadenceSchedule.rotation, len = rot.length;
         var curIdx = state.cadenceSchedule.currentIndex % len;
         var _today = new Date(), _ds = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
         // Build 7-day window: 3 past + today + 3 future
+        // If today's workout is already tracked, currentIndex has advanced to next slot
+        // so offset back by 1 to align today with what was actually done
+        var baseIdx = alreadyTracked ? curIdx - 1 : curIdx;
         var days = [];
         for (var di = -3; di <= 3; di++) {
           var d = new Date(_today); d.setDate(_today.getDate() + di);
-          var rotIdx = ((curIdx + di) % len + len) % len;
+          var rotIdx = ((baseIdx + di) % len + len) % len;
           var slot = rot[rotIdx];
           var w = slot && slot.workoutId ? state.workouts[slot.workoutId] : null;
           var dateStr = toDateStr(d);
@@ -1248,10 +1284,7 @@
         }
         return e("div", { className: "card", style: { padding: "10px 14px" } },
           e("div", { style: { display: "flex", alignItems: "center", gap: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" } },
-            e("div", { style: { flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" } },
-              e("span", { style: { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: "#71717a" } }, "Split"),
-              e("span", { style: { fontSize: 11, color: "#a1a1aa", fontWeight: 600 } }, (curIdx + 1) + "/" + len),
-            ),
+            e("span", { style: { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: "#71717a", flexShrink: 0 } }, "Split"),
             e("div", { style: { width: 1, height: 32, background: "#3f3f46", flexShrink: 0 } }),
             e("div", { style: { display: "flex", gap: 6, flex: 1, justifyContent: "space-between" } },
               days.map(function(dd) {
@@ -1265,7 +1298,7 @@
                 return e("div", { key: dd.di, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flexShrink: 0, minWidth: 0, flex: 1 } },
                   e("span", { style: { fontSize: 9, color: dayColor, fontWeight: dd.isCur ? 700 : 400 } }, dd.isCur ? "Today" : dd.day),
                   e("span", { style: { fontSize: 10, padding: "3px 6px", borderRadius: 9999, background: pillBg, color: pillColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", display: "block", textAlign: "center", outline: done ? "2px solid rgba(74,222,128,0.3)" : dd.isCur ? "2px solid rgba(249,115,22,0.3)" : "none", outlineOffset: 1 } }, pillLabel),
-                  dd.isPast && e("span", { style: { fontSize: 7, marginTop: 1 } }, done ? "\u2713" : missed ? "\u2717" : ""),
+                  (dd.isPast || dd.isCur) && (done ? e("span", { style: { fontSize: 9, marginTop: 1, color: "#4ade80" } }, "\u2713") : missed ? e("span", { style: { fontSize: 9, marginTop: 1, color: "#ef4444" } }, "\u2717") : null),
                 );
               })
             ),
@@ -1332,19 +1365,6 @@
         reversedHistory.length > 0 && renderPastEntry(reversedHistory[0], undefined, reversedHistory[0].date === todayStr),
         // Expanded: show more past workouts (auto-expand when today tracked)
         (showPast || alreadyTracked) && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
-      ),
-      // Week preview
-      state.scheduleType === "weekly" && e("div", { className: "card" },
-        e("div", { className: "label" }, "This Week"),
-        e("div", { className: "grid-7" },
-          state.weeklySchedule.map(slot => {
-            const isToday = slot.day === todayDay(); const w = slot.workoutId ? state.workouts[slot.workoutId] : null;
-            return e("div", { key: slot.day, style: { textAlign: "center", padding: 8, borderRadius: 8, fontSize: 11, background: isToday ? "rgba(249,115,22,0.15)" : "rgba(63,63,70,0.5)", border: isToday ? "1px solid rgba(249,115,22,0.4)" : "1px solid transparent" } },
-              e("div", { style: { fontWeight: 500, color: isToday ? "#f97316" : "#d4d4d8" } }, DAY_LABELS[slot.day]),
-              e("div", { style: { marginTop: 4, color: w ? "#e4e4e7" : "#52525b" } }, w ? w.name.slice(0,5) : "Rest"),
-            );
-          })
-        ),
       ),
     );
   }

@@ -1,4 +1,4 @@
-const VERSION = '2.48.0';
+const VERSION = '2.49.0';
 const CACHE_NAME = 'workit-v' + VERSION;
 const ASSETS = [
   './',
