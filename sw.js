@@ -1,4 +1,4 @@
-const VERSION = new URL(self.location).searchParams.get('v') || '0';
+const VERSION = '2.43.1';
 const CACHE_NAME = 'workit-v' + VERSION;
 const ASSETS = [
   './',

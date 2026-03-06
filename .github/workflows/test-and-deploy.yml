@@ -40,6 +40,8 @@ jobs:
       - name: Prepare site artifact
         run: |
           mkdir _site
+          VERSION=$(grep -oP "APP_VERSION = \"\K[^\"]+" index.html)
+          sed -i "s/const VERSION = '.*'/const VERSION = '$VERSION'/" sw.js
           cp index.html manifest.json sw.js icon.svg _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

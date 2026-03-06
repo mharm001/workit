@@ -2230,7 +2230,31 @@ null,
   ReactDOM.createRoot(document.getElementById("root")).render(e(App));
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js?v=' + APP_VERSION);
+    navigator.serviceWorker.register('./sw.js').then(function(reg) {
+      // Show update banner when a new SW is waiting
+      function showUpdateBanner() {
+        var banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#f97316;color:#fff;padding:12px 16px;text-align:center;font-size:14px;font-weight:600;z-index:9999;cursor:pointer;font-family:-apple-system,sans-serif';
+        banner.textContent = 'New version available — tap to update';
+        banner.onclick = function() { window.location.reload(); };
+        document.body.appendChild(banner);
+      }
+      if (reg.waiting) showUpdateBanner();
+      reg.addEventListener('updatefound', function() {
+        var nw = reg.installing;
+        nw.addEventListener('statechange', function() {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner();
+        });
+      });
+      // Force SW update check when app is foregrounded (fixes iOS/Android snapshot restore)
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') reg.update();
+      });
+    });
+    // Reload when new SW takes control
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      window.location.reload();
+    });
   }
 })();
 </script>
