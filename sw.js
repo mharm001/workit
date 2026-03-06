@@ -1,4 +1,5 @@
-const CACHE_NAME = 'workit-v1';
+const VERSION = new URL(self.location).searchParams.get('v') || '0';
+const CACHE_NAME = 'workit-v' + VERSION;
 const ASSETS = [
   './',
   './index.html',
@@ -28,6 +29,12 @@ self.addEventListener('fetch', e => {
 
   // Network-first for Google APIs (auth + sheets)
   if (url.hostname.includes('google')) return;
+
+  // Network-first for HTML so users always get the latest version
+  if (url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
 
   // Cache-first for app assets
   e.respondWith(

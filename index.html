@@ -11,7 +11,7 @@
   <meta name="theme-color" content="#0c0c0c">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230c0c0c'/><rect x='3' y='12' width='4' height='17' rx='1.5' fill='%23f97316' opacity='.8'/><rect x='9' y='8' width='4' height='21' rx='1.5' fill='%23f97316'/><rect x='15' y='4' width='4' height='25' rx='1.5' fill='%23f97316'/><rect x='21' y='14' width='4' height='15' rx='1.5' fill='%23f97316' opacity='.6'/><rect x='27' y='10' width='4' height='19' rx='1.5' fill='%23f97316' opacity='.9'/></svg>">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:;">
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" integrity="sha384-HtMZLkYo+pR5/u7zCzXxMJP6QoNnQJt1qkHM0EaOPvGDIzaVZbmYr/TlvUZ/sKAg">
   <script crossorigin="anonymous" src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" integrity="sha384-tMH8h3BGESGckSAVGZ82T9n90ztNXxvdwvdM6UoR56cYcf+0iGXBliJ29D+wZ/x8"></script>
   <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh"></script>
@@ -65,6 +65,15 @@
     .login-info-btn:hover { color: #a1a1aa; }
     .lib-exercise-btn { text-align: left; padding: 8px 12px; border-radius: 6px; border: none; background: transparent; color: #e4e4e7; font-size: 13px; cursor: pointer; width: 100%; }
     .lib-exercise-btn:hover { background: #3f3f46; }
+    .drag-handle { display: flex; align-items: center; justify-content: center; width: 32px; min-width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); cursor: grab; color: #52525b; font-size: 18px; padding: 0; touch-action: none; user-select: none; -webkit-user-select: none; transition: all 0.15s; }
+    .drag-handle:hover { background: #3f3f46; color: #71717a; border-color: #52525b; }
+    .drag-handle:active { cursor: grabbing; }
+    .ex-card-dragging { opacity: 0.4; }
+    .ex-card-drag-over { border: 2px solid var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .move-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: #71717a; cursor: pointer; transition: all 0.15s; padding: 0; }
+    .move-btn:hover:not(:disabled) { background: #3f3f46; color: #e4e4e7; border-color: #52525b; }
+    .move-btn:active:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .move-btn:disabled { opacity: 0.25; cursor: default; }
   </style>
 </head>
 <body>
@@ -81,7 +90,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.41.0";
+  const APP_VERSION = "2.43.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1221,7 +1230,13 @@
     const addRot = wid => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:[...state.cadenceSchedule.rotation,{workoutId:wid}]}}); };
     const remRot = i => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:state.cadenceSchedule.rotation.filter((_,idx)=>idx!==i)}}); };
     const moveRot = (i,dir) => {const r=[...state.cadenceSchedule.rotation];const n=i+dir;if(n<0||n>=r.length)return;[r[i],r[n]]=[r[n],r[i]];dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:r}});};
-    const switchType = t => { if (t !== state.scheduleType) dispatch({type:"SET_SCHEDULE_TYPE",scheduleType:t}); };
+    const [pendingSwitchType, setPendingSwitchType] = React.useState(null);
+    const eitherHasData = state.weeklySchedule.some(s => s.workoutId) || state.cadenceSchedule.rotation.length > 0;
+    const switchType = t => {
+      if (t === state.scheduleType) return;
+      if (eitherHasData) { setPendingSwitchType(t); return; }
+      dispatch({type:"SET_SCHEDULE_TYPE",scheduleType:t});
+    };
 
     if (wl.length === 0) return e("div", { className: "fade-in", style: { padding: 16 } },
       e("h2", { style: { fontSize: 20, fontWeight: 700, marginBottom: 16 } }, "Schedule Setup"),
@@ -1234,19 +1249,14 @@
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
       e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
         e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, "Schedule Setup"),
-        syncing ? e("span", { style: { fontSize: 11, color: "#f97316" } }, "Syncing...")
-          : syncStatus === "synced" ? e("span", { style: { fontSize: 11, color: "#4ade80" } }, "Synced")
-          : syncStatus === "error" ? e("span", { style: { fontSize: 11, color: "#ef4444" } }, "Sync failed")
-          : syncStatus === "offline" ? e("span", { style: { fontSize: 11, color: "#71717a" } }, "Offline")
-          : null,
+null,
       ),
       // Toggle
       e("div", { style: { display: "flex", background: "#27272a", borderRadius: 8, padding: 4 } },
         ["weekly","cadence"].map(t => {
           const hasData = t==="weekly" ? state.weeklySchedule.some(s=>s.workoutId) : state.cadenceSchedule.rotation.length>0;
           return e("button", { key: t, style: { flex: 1, padding: "8px 0", borderRadius: 6, border: "none", fontSize: 14, fontWeight: 500, cursor: "pointer", background: state.scheduleType===t?"#f97316":"transparent", color: state.scheduleType===t?"#fff":"#a1a1aa", position: "relative" }, onClick: () => switchType(t) },
-            t === "weekly" ? "Weekly" : "Rotating Split",
-            hasData && state.scheduleType!==t && e("span", { style: { display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#4ade80", marginLeft: 6, verticalAlign: "middle" } })
+            t === "weekly" ? "Weekly" : "Rotating Split"
           );
         })
       ),
@@ -1297,6 +1307,12 @@
             ),
           ),
         ),
+      pendingSwitchType && e(ConfirmModal, {
+        message: "Switch to " + (pendingSwitchType === "weekly" ? "Weekly" : "Rotating Split") + " schedule? Your " + (pendingSwitchType === "weekly" ? "Rotating Split" : "Weekly") + " settings are saved and you can switch back anytime.",
+        confirmLabel: "Switch",
+        onConfirm: () => { dispatch({type:"SET_SCHEDULE_TYPE",scheduleType:pendingSwitchType}); setPendingSwitchType(null); },
+        onCancel: () => setPendingSwitchType(null),
+      }),
     );
   }
 
@@ -1308,24 +1324,73 @@
   function WorkoutBuilder({ state, dispatch }) {
     const [editing, setEditing] = useState(null);
     const [name, setName] = useState("");
+    const [nameError, setNameError] = useState(false);
     const [targetMuscles, setTargetMuscles] = useState([]);
     const [exercises, setExercises] = useState([]);
     const [showLib, setShowLib] = useState(false);
     const [libCat, setLibCat] = useState("");
     const [showAllCats, setShowAllCats] = useState(false);
+    const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+    const [dragIndex, setDragIndex] = useState(null);
+    const [overIndex, setOverIndex] = useState(null);
+    const touchDragRef = useRef({ active: false, startY: 0, index: null });
     const wl = Object.values(state.workouts);
 
-    const startNew = () => { setEditing("new"); setName(""); setTargetMuscles([]); setExercises([]); setLibCat(""); setShowAllCats(false); };
-    const startEdit = w => { setEditing(w.id); setName(w.name); setTargetMuscles(w.targetMuscles||[]); setExercises(w.exercises.map(x=>({...x}))); setLibCat(""); setShowAllCats(false); };
+    // ── drag-and-drop helpers ──
+    // Desktop (HTML5 drag)
+    const moveEx = (idx, dir) => { const a = [...exercises]; const to = idx + dir; if (to < 0 || to >= a.length) return; const [item] = a.splice(idx, 1); a.splice(to, 0, item); setExercises(a); };
+    const onDragStart = (idx, ev) => { ev.dataTransfer.effectAllowed = 'move'; setDragIndex(idx); };
+    const onDragEnter = idx => { if (idx !== dragIndex) setOverIndex(idx); };
+    const onDragOver = ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; };
+    const onDrop = idx => {
+      if (dragIndex !== null && idx !== dragIndex) {
+        const a = [...exercises];
+        const [item] = a.splice(dragIndex, 1);
+        a.splice(idx, 0, item);
+        setExercises(a);
+      }
+      setDragIndex(null); setOverIndex(null);
+    };
+    const onDragEnd = () => { setDragIndex(null); setOverIndex(null); };
+
+    // Mobile (touch)
+    const onTouchStart = (ev, idx) => {
+      touchDragRef.current = { active: true, startY: ev.touches[0].clientY, index: idx };
+      setDragIndex(idx);
+    };
+    const onTouchMove = ev => {
+      if (!touchDragRef.current.active) return;
+      ev.preventDefault();
+      const y = ev.touches[0].clientY;
+      const els = ev.currentTarget.closest(".ex-drag-list").querySelectorAll(".ex-drag-item");
+      let target = null;
+      els.forEach((el, i) => {
+        const rect = el.getBoundingClientRect();
+        if (y >= rect.top && y <= rect.bottom) target = i;
+      });
+      if (target !== null && target !== touchDragRef.current.index) setOverIndex(target);
+    };
+    const onTouchEnd = () => {
+      if (touchDragRef.current.active && overIndex !== null && overIndex !== touchDragRef.current.index) {
+        const a = [...exercises];
+        const [item] = a.splice(touchDragRef.current.index, 1);
+        a.splice(overIndex, 0, item);
+        setExercises(a);
+      }
+      touchDragRef.current = { active: false, startY: 0, index: null };
+      setDragIndex(null); setOverIndex(null);
+    };
+
+    const startNew = () => { setEditing("new"); setName(""); setNameError(false); setTargetMuscles([]); setExercises([]); setLibCat(""); setShowAllCats(false); };
+    const startEdit = w => { setEditing(w.id); setName(w.name); setNameError(false); setTargetMuscles(w.targetMuscles||[]); setExercises(w.exercises.map(x=>({...x}))); setLibCat(""); setShowAllCats(false); };
     const toggleMuscle = cat => { setTargetMuscles(prev => prev.includes(cat) ? prev.filter(c=>c!==cat) : [...prev,cat]); setLibCat(""); setShowAllCats(false); };
     const addEx = ex => setExercises([...exercises, { id: uid(), name: ex.name, sets: ex.defaultSets, defaultReps: ex.defaultReps, alternatives: [] }]);
     const addCustom = () => setExercises([...exercises, { id: uid(), name: "New Exercise", sets: 3, defaultReps: 10, alternatives: [] }]);
     const updEx = (id, f, v) => setExercises(exercises.map(x => x.id===id ? {...x,[f]:v} : x));
     const remEx = id => setExercises(exercises.filter(x => x.id!==id));
-    const moveEx = (i,d) => { const a=[...exercises];const n=i+d;if(n<0||n>=a.length)return;[a[i],a[n]]=[a[n],a[i]];setExercises(a); };
     const addAlt = (id,n) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:[...x.alternatives,n]} : x));
     const remAlt = (id,ai) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:x.alternatives.filter((_,i)=>i!==ai)} : x));
-    const save = () => { if(!name.trim())return; dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),targetMuscles,exercises}}); setEditing(null); };
+    const save = () => { if(!name.trim()){ setNameError(true); return; } dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),targetMuscles,exercises}}); setEditing(null); };
     const del = id => { dispatch({type:"DELETE_WORKOUT",id}); if(editing===id)setEditing(null); };
     // Library categories: only show target muscles unless "Show all" is toggled
     const libCategories = targetMuscles.length > 0 && !showAllCats ? targetMuscles : ALL_MUSCLE_GROUPS;
@@ -1337,7 +1402,10 @@
           e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, editing === "new" ? "New Workout" : "Edit Workout"),
           e("button", { style: { background: "none", border: "none", color: "#a1a1aa", cursor: "pointer", fontSize: 13 }, onClick: () => setEditing(null) }, "Cancel"),
         ),
-        e("input", { name: "workoutName", type: "text", placeholder: "Workout name", value: name, onInput: ev => setName(ev.target.value), className: "input", style: { padding: 12, fontSize: 16 } }),
+        e("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
+          e("input", { name: "workoutName", type: "text", placeholder: "Workout name", value: name, onInput: ev => { setName(ev.target.value); if(ev.target.value.trim())setNameError(false); }, className: "input", style: { padding: 12, fontSize: 16, borderColor: nameError ? "#ef4444" : "" } }),
+          nameError && e("span", { style: { fontSize: 12, color: "#ef4444", paddingLeft: 2 } }, "A workout name is required"),
+        ),
         // Target muscle groups
         e("div", null,
           e("div", { className: "label" }, "Target Muscles"),
@@ -1346,12 +1414,49 @@
           ),
           targetMuscles.length === 0 && e("p", { style: { fontSize: 11, color: "#52525b", marginTop: 6 } }, "Select muscles to filter the exercise library"),
         ),
+        e("button", { className: "btn btn-ghost", style: { width: "100%" }, onClick: () => setShowLib(!showLib) }, "+ Add from Library"),
+        showLib && e("div", { className: "card" },
+          e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
+            libCategories.map(cat => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: activeLibCat===cat?"#f97316": targetMuscles.includes(cat)?"#52341a":"#3f3f46", color: activeLibCat===cat?"#fff": targetMuscles.includes(cat)?"#f97316":"#a1a1aa", fontWeight: targetMuscles.includes(cat)?600:400 }, onClick: () => setLibCat(cat) }, cat))
+          ),
+          targetMuscles.length > 0 && e("div", { style: { marginBottom: 8 } },
+            e("button", { style: { background: "none", border: "none", color: "#71717a", fontSize: 11, cursor: "pointer", textDecoration: "underline" }, onClick: () => setShowAllCats(!showAllCats) }, showAllCats ? "Show only target muscles" : "Show all muscles")
+          ),
+          e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
+            (EXERCISE_LIBRARY[activeLibCat]||[]).map(ex => e("button", { key: ex.name, className: "lib-exercise-btn", onClick: () => addEx(ex) },
+              ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"×"+ex.defaultReps),
+            ))
+          ),
+        ),
+        e("button", { className: "btn btn-ghost", style: { width: "100%", marginTop: 8 }, onClick: addCustom }, "+ Add Custom Exercise"),
         e("div", { className: "label" }, "Exercises"),
-        exercises.map((ex, idx) => e("div", { key: ex.id, className: "card", style: { display: "flex", flexDirection: "column", gap: 12 } },
+        e("div", { className: "ex-drag-list", style: { display: "flex", flexDirection: "column", gap: 12 } },
+        exercises.map((ex, idx) => e("div", {
+          key: ex.id,
+          className: "card ex-drag-item" + (dragIndex === idx ? " ex-card-dragging" : "") + (overIndex === idx ? " ex-card-drag-over" : ""),
+          draggable: true,
+          onDragStart: ev => onDragStart(idx, ev),
+          onDragEnter: () => onDragEnter(idx),
+          onDragOver: onDragOver,
+          onDrop: () => onDrop(idx),
+          onDragEnd: onDragEnd,
+          style: { display: "flex", flexDirection: "column", gap: 12 }
+        },
           e("div", { style: { display: "flex", gap: 8, alignItems: "start" } },
-            e("div", { style: { display: "flex", flexDirection: "column", gap: 4, paddingTop: 4 } },
-              e("button", { onClick: ()=>moveEx(idx,-1), style: { background:"none",border:"none",color:"#71717a",cursor:"pointer",fontSize:11 } }, "▲"),
-              e("button", { onClick: ()=>moveEx(idx,1), style: { background:"none",border:"none",color:"#71717a",cursor:"pointer",fontSize:11 } }, "▼"),
+            e("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 32 } },
+              e("div", {
+                className: "drag-handle",
+                onTouchStart: ev => onTouchStart(ev, idx),
+                onTouchMove: onTouchMove,
+                onTouchEnd: onTouchEnd,
+              }, "⠿"),
+              e("div", { style: { height: 2 } }),
+              e("button", { className: "move-btn", onClick: () => moveEx(idx, -1), disabled: idx === 0 },
+                e("svg", { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.5, strokeLinecap: "round", strokeLinejoin: "round" }, e("polyline", { points: "18 15 12 9 6 15" }))
+              ),
+              e("button", { className: "move-btn", onClick: () => moveEx(idx, 1), disabled: idx === exercises.length - 1 },
+                e("svg", { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.5, strokeLinecap: "round", strokeLinejoin: "round" }, e("polyline", { points: "6 9 12 15 18 9" }))
+              ),
             ),
             e("div", { style: { flex: 1, display: "flex", flexDirection: "column", gap: 8 } },
               e("input", { name: "exerciseName", type: "text", value: ex.name, onInput: ev => updEx(ex.id,"name",ev.target.value), className: "input", style: { fontSize: 13 } }),
@@ -1387,23 +1492,8 @@
             ),
             e("button", { onClick: () => remEx(ex.id), style: { background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,paddingTop:4 } }, "✕"),
           ),
-        )),
-        e("button", { className: "btn btn-ghost", style: { width: "100%" }, onClick: () => setShowLib(!showLib) }, "+ Add from Library"),
-        e("button", { className: "btn btn-ghost", style: { width: "100%", marginTop: 8 }, onClick: addCustom }, "+ Add Custom Exercise"),
-        showLib && e("div", { className: "card" },
-          e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
-            libCategories.map(cat => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: activeLibCat===cat?"#f97316": targetMuscles.includes(cat)?"#52341a":"#3f3f46", color: activeLibCat===cat?"#fff": targetMuscles.includes(cat)?"#f97316":"#a1a1aa", fontWeight: targetMuscles.includes(cat)?600:400 }, onClick: () => setLibCat(cat) }, cat))
-          ),
-          targetMuscles.length > 0 && e("div", { style: { marginBottom: 8 } },
-            e("button", { style: { background: "none", border: "none", color: "#71717a", fontSize: 11, cursor: "pointer", textDecoration: "underline" }, onClick: () => setShowAllCats(!showAllCats) }, showAllCats ? "Show only target muscles" : "Show all muscles")
-          ),
-          e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
-            (EXERCISE_LIBRARY[activeLibCat]||[]).map(ex => e("button", { key: ex.name, className: "lib-exercise-btn", onClick: () => addEx(ex) },
-              ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"×"+ex.defaultReps),
-            ))
-          ),
-        ),
-        e("button", { className: "btn btn-accent", style: { width: "100%", padding: 14, marginTop: 8 }, onClick: save, disabled: !name.trim() }, "Save Workout"),
+        ))),
+        e("button", { className: "btn btn-accent", style: { width: "100%", padding: 14, marginTop: 8 }, onClick: save }, "Save Workout"),
       );
     }
 
@@ -1418,7 +1508,7 @@
           e("div", { style: { fontSize: 18, fontWeight: 600 } }, w.name),
           e("div", { style: { display: "flex", gap: 12 } },
             e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>startEdit(w) }, "Edit"),
-            e("button", { style: { background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13 }, onClick: ()=>del(w.id) }, "Delete"),
+            e("button", { style: { background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13 }, onClick: ()=>setDeleteConfirmId(w.id) }, "Delete"),
           ),
         ),
         (w.targetMuscles||[]).length > 0 && e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
@@ -1429,6 +1519,11 @@
           e("span", { style: { color: "#71717a" } }, ex.sets+"×"+ex.defaultReps + (ex.alternatives.length > 0 ? " (+"+ex.alternatives.length+" alt)" : "")),
         )),
       )),
+      deleteConfirmId && e(ConfirmModal, {
+        message: "Delete \"" + (state.workouts[deleteConfirmId]||{}).name + "\"? This cannot be undone.",
+        onConfirm: () => { del(deleteConfirmId); setDeleteConfirmId(null); },
+        onCancel: () => setDeleteConfirmId(null),
+      }),
     );
   }
 
@@ -1921,30 +2016,7 @@
     // stateRef always holds the latest state so callbacks (connectSheets) never close over a stale snapshot
     const stateRef = useRef(null);
 
-    // ── 1. On mount: restore session if user was active (signed in or mid-workout)
-    //    Only explicit sign-out clears the session flag → sends to login.
-    useEffect(() => {
-      var target = "login";
-      try {
-        const hadSession = localStorage.getItem("workit_session") === "active";
-        const cached = loadLocal();
-        if (hadSession && cached) {
-          const { trackingSession, ...data } = cached;
-          dispatch({type:"LOAD_FROM_SHEETS", data});
-          if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
-          prevState.current = { ...makeInitialState(), ...data };
-          target = "offline";
-        }
-      } catch(ex) { console.warn("Session restore failed:", ex); }
-      const check = setInterval(() => {
-        if(typeof google!=="undefined"&&google.accounts){
-          clearInterval(check);
-          setAuthState(target);
-        }
-      }, 200);
-      const fb = setTimeout(() => { clearInterval(check); setAuthState(target); }, 3000);
-      return () => { clearInterval(check); clearTimeout(fb); };
-    }, []);
+    // ── 1. On mount: restore session (moved after connectSheets definition below)
 
     // ── 2. Save to localStorage on every state change
     //    Skip saving if we're on the login screen with empty state — prevents wiping good cached data
@@ -2040,6 +2112,34 @@
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, []); // stateRef is a ref — stable identity, no need in dep array
 
+    // ── 1. On mount: restore session if user was active (signed in or mid-workout)
+    //    Only explicit sign-out clears the session flag → sends to login.
+    //    If session existed, go to "offline" with cached data — auto-reconnect
+    //    (effect 5a) will re-auth on the next user interaction.
+    useEffect(() => {
+      var target = "login";
+      try {
+        const hadSession = localStorage.getItem("workit_session") === "active";
+        const cached = loadLocal();
+        if (hadSession && cached) {
+          const { trackingSession, ...data } = cached;
+          dispatch({type:"LOAD_FROM_SHEETS", data});
+          if (trackingSession) dispatch({type:"START_TRACKING", session: trackingSession});
+          prevState.current = { ...makeInitialState(), ...data };
+          target = "offline";
+        }
+      } catch(ex) { console.warn("Session restore failed:", ex); }
+
+      const check = setInterval(() => {
+        if(typeof google!=="undefined"&&google.accounts){
+          clearInterval(check); setAuthState(target);
+          if (target === "offline") setSyncStatus("offline");
+        }
+      }, 200);
+      const fb = setTimeout(() => { clearInterval(check); setAuthState(target); if (target === "offline") setSyncStatus("offline"); }, 3000);
+      return () => { clearInterval(check); clearTimeout(fb); };
+    }, []);
+
     // ── 5a. Auto-reconnect when ANY data changes while offline
     // Compute a single state hash (module-level _quickHash reused — no per-render allocation)
     const prevDataHash = useRef(null);
@@ -2050,12 +2150,16 @@
       prevDataHash.current = dataHash;
       if (changed && authState === "offline" && typeof google !== "undefined" && google.accounts) {
         try {
+          setAuthState("loading"); setLoadMsg("Syncing...");
           var client = google.accounts.oauth2.initTokenClient({
             client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
-            callback: async function(resp) { if (!resp.error) await connectSheets(resp.access_token, true); },
+            callback: async function(resp) {
+              if (!resp.error) { await connectSheets(resp.access_token, true); }
+              else { setAuthState("offline"); }
+            },
           });
-          client.requestAccessToken();
-        } catch(ex) { /* stay offline, data is safe in localStorage */ }
+          client.requestAccessToken({ prompt: "" });
+        } catch(ex) { setAuthState("offline"); }
       }
     }, [state.history, state.weightLog, state.workouts, state.weeklySchedule, state.cadenceSchedule, state.scheduleType, authState, connectSheets]);
 
@@ -2125,7 +2229,7 @@
   ReactDOM.createRoot(document.getElementById("root")).render(e(App));
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js');
+    navigator.serviceWorker.register('./sw.js?v=' + APP_VERSION);
   }
 })();
 </script>
