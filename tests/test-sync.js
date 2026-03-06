@@ -775,6 +775,115 @@ async function test10_PullDoesNotPush() {
 
 
 // ═══════════════════════════════════════════════════════════════════
+// TEST 11: Schedule change while connected syncs to Sheets
+// Reproduces: "changed schedule on browser, said autosaved, but phone shows old data"
+// ═══════════════════════════════════════════════════════════════════
+async function test11_ScheduleChangeSyncsWhenConnected() {
+  console.log("\n\n═══ TEST 11: Schedule change while connected syncs to Sheets ═══");
+  const app = new AppSimulator();
+
+  // Setup: login with some data
+  app.sheets.remoteData = {
+    scheduleType: "cadence",
+    weeklySchedule: DAYS.map(d => ({ day: d, workoutId: null })),
+    cadenceSchedule: { restMode: "manual", autoRestEvery: 3, rotation: [], currentIndex: 0 },
+    workouts: {
+      w1: { id: "w1", name: "Push", exercises: [] },
+      w2: { id: "w2", name: "Pull", exercises: [] },
+      w3: { id: "w3", name: "Legs", exercises: [] },
+    },
+    history: [], weightLog: [], weightUnit: "lbs",
+  };
+  app.mount();
+  await app.handleLogin();
+  assert(app.authState === "ready", "Connected after login");
+  assert(app.state.cadenceSchedule.rotation.length === 0, "Rotation starts empty");
+
+  // Simulate: user adds Push, Pull, Legs, Rest to cadence rotation
+  app.dispatch({type:"SET_CADENCE_SCHEDULE", data:{rotation:[{workoutId:"w1"},{workoutId:"w2"},{workoutId:"w3"},{workoutId:null}]}});
+  assert(app.state.cadenceSchedule.rotation.length === 4, "Local state has 4 rotation entries");
+
+  // The "Auto-saved" label flashes — this is LOCAL only.
+  // The real question: does the debounced sync fire?
+  // Simulate effect 4b: detect state change and trigger sync
+  const {activeView, trackingSession, ...cur} = app.state;
+  const prev = app.sheets.remoteData;
+  const curJson = JSON.stringify(cur);
+  const {activeView: _, trackingSession: __, ...prevClean} = {...makeInitialState(), ...prev};
+  const prevJson = JSON.stringify(prevClean);
+  const wouldSync = curJson !== prevJson;
+  assert(wouldSync, "Effect 4b detects schedule change (cur !== prev)");
+
+  // Simulate the debounced sync that effect 4b would trigger
+  await app.pushToSheets();
+
+  // Verify remote now has the rotation
+  const remote = await app.sheets.loadAll();
+  assert(remote.cadenceSchedule.rotation.length === 4, "Remote has 4 rotation entries after sync");
+  assert(remote.cadenceSchedule.rotation[0].workoutId === "w1", "Remote rotation[0] is Push");
+  assert(remote.cadenceSchedule.rotation[3].workoutId === null, "Remote rotation[3] is Rest");
+
+  // Now simulate: login on SECOND DEVICE (phone) — fresh login pulls from remote
+  const phone = new AppSimulator();
+  phone.sheets = app.sheets; // same remote
+  phone.mount();
+  await phone.handleLogin();
+  assert(phone.state.cadenceSchedule.rotation.length === 4, "Phone sees 4 rotation entries after fresh login");
+  assert(phone.state.cadenceSchedule.rotation[0].workoutId === "w1", "Phone sees Push as first rotation entry");
+
+  // ── Now test the FAILURE case: what if sync didn't happen? ──
+  // Simulate: user changes schedule but sync fails/never fires
+  app.dispatch({type:"SET_CADENCE_SCHEDULE", data:{rotation:[{workoutId:"w2"},{workoutId:"w1"}]}});
+  assert(app.state.cadenceSchedule.rotation.length === 2, "Local changed to 2 entries");
+  // DON'T push — simulating the sync not happening
+
+  // Phone re-login: still sees OLD remote data (4 entries)
+  const phone2 = new AppSimulator();
+  phone2.sheets = app.sheets;
+  phone2.mount();
+  await phone2.handleLogin();
+  assert(phone2.state.cadenceSchedule.rotation.length === 4, "Phone still sees OLD 4 entries (sync never happened)");
+  assert(phone2.state.cadenceSchedule.rotation.length !== app.state.cadenceSchedule.rotation.length, "DESYNC: phone and browser have different data");
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// TEST 12: "Auto-saved" is local-only — Sheets sync is separate
+// ═══════════════════════════════════════════════════════════════════
+async function test12_AutoSavedVsSheetSync() {
+  console.log("\n\n═══ TEST 12: Auto-saved is local-only, Sheets sync is separate ═══");
+  const app = new AppSimulator();
+
+  app.sheets.remoteData = {
+    scheduleType: "weekly",
+    weeklySchedule: DAYS.map(d => ({ day: d, workoutId: null })),
+    cadenceSchedule: { restMode: "manual", autoRestEvery: 3, rotation: [], currentIndex: 0 },
+    workouts: { w1: { id: "w1", name: "Push", exercises: [] } },
+    history: [], weightLog: [], weightUnit: "lbs",
+  };
+  app.mount();
+  await app.handleLogin();
+
+  // User sets weekly schedule: Tue=Push
+  app.dispatch({type:"SET_WEEKLY_SCHEDULE", schedule: app.state.weeklySchedule.map(s => s.day==="Tue"?{...s,workoutId:"w1"}:s)});
+
+  // "Auto-saved" flashes — that's just local state
+  app.saveLocal(); // effect #2 saves to localStorage
+  const local = app.loadLocal();
+  assert(local.weeklySchedule.find(d=>d.day==="Tue").workoutId === "w1", "localStorage has Tue=Push (local save works)");
+
+  // But remote is STALE until syncToSheets runs
+  const remoteBeforeSync = await app.sheets.loadAll();
+  assert(remoteBeforeSync.weeklySchedule.find(d=>d.day==="Tue").workoutId === null, "Remote still has Tue=null (sync hasn't happened yet)");
+
+  // After the 2s debounce, syncToSheets fires
+  await app.pushToSheets();
+  const remoteAfterSync = await app.sheets.loadAll();
+  assert(remoteAfterSync.weeklySchedule.find(d=>d.day==="Tue").workoutId === "w1", "Remote now has Tue=Push (after sync)");
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
 // RUN ALL TESTS
 // ═══════════════════════════════════════════════════════════════════
 async function runAll() {
@@ -790,6 +899,8 @@ async function runAll() {
   await test8_AutoReconnectOnScheduleChange();
   await test9_PushVsPull();
   await test10_PullDoesNotPush();
+  await test11_ScheduleChangeSyncsWhenConnected();
+  await test12_AutoSavedVsSheetSync();
 
   console.log(`\n\n═══ RESULTS: ${passed} passed, ${failed} failed ═══`);
   if (failed > 0) process.exit(1);

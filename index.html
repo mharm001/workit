@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.36.0";
+  const APP_VERSION = "2.37.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1162,14 +1162,12 @@
   // ═══════════════════════════════════════════════════════════════════
   // SCHEDULE SETUP
   // ═══════════════════════════════════════════════════════════════════
-  function ScheduleSetup({ state, dispatch }) {
-    const [saved, setSaved] = useState(false);
+  function ScheduleSetup({ state, dispatch, syncStatus, syncing }) {
     const wl = Object.values(state.workouts);
-    const flash = () => { setSaved(true); setTimeout(()=>setSaved(false), 1500); };
-    const setSlot = (day, wid) => { dispatch({type:"SET_WEEKLY_SCHEDULE",schedule:state.weeklySchedule.map(s=>s.day===day?{...s,workoutId:wid}:s)}); flash(); };
-    const addRot = wid => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:[...state.cadenceSchedule.rotation,{workoutId:wid}]}}); flash(); };
-    const remRot = i => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:state.cadenceSchedule.rotation.filter((_,idx)=>idx!==i)}}); flash(); };
-    const moveRot = (i,dir) => {const r=[...state.cadenceSchedule.rotation];const n=i+dir;if(n<0||n>=r.length)return;[r[i],r[n]]=[r[n],r[i]];dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:r}}); flash();};
+    const setSlot = (day, wid) => { dispatch({type:"SET_WEEKLY_SCHEDULE",schedule:state.weeklySchedule.map(s=>s.day===day?{...s,workoutId:wid}:s)}); };
+    const addRot = wid => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:[...state.cadenceSchedule.rotation,{workoutId:wid}]}}); };
+    const remRot = i => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:state.cadenceSchedule.rotation.filter((_,idx)=>idx!==i)}}); };
+    const moveRot = (i,dir) => {const r=[...state.cadenceSchedule.rotation];const n=i+dir;if(n<0||n>=r.length)return;[r[i],r[n]]=[r[n],r[i]];dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:r}});};
     const switchType = t => { if (t !== state.scheduleType) dispatch({type:"SET_SCHEDULE_TYPE",scheduleType:t}); };
 
     if (wl.length === 0) return e("div", { className: "fade-in", style: { padding: 16 } },
@@ -1183,7 +1181,11 @@
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
       e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
         e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, "Schedule Setup"),
-        saved && e("span", { style: { fontSize: 11, color: "#4ade80", transition: "opacity 0.3s" } }, "Auto-saved"),
+        syncing ? e("span", { style: { fontSize: 11, color: "#f97316" } }, "Syncing...")
+          : syncStatus === "synced" ? e("span", { style: { fontSize: 11, color: "#4ade80" } }, "Synced")
+          : syncStatus === "error" ? e("span", { style: { fontSize: 11, color: "#ef4444" } }, "Sync failed")
+          : syncStatus === "offline" ? e("span", { style: { fontSize: 11, color: "#71717a" } }, "Offline")
+          : null,
       ),
       // Toggle
       e("div", { style: { display: "flex", background: "#27272a", borderRadius: 8, padding: 4 } },
@@ -2001,7 +2003,7 @@
           e(NavBar, { key: "nav", activeView: state.activeView, dispatch, isConnected: authState==="ready", onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect }),
           e("div", { key: "content", style: { paddingBottom: 80 } },
             state.activeView === "dashboard" && e(Dashboard, { state, dispatch }),
-            state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch }),
+            state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch, syncStatus, syncing }),
             state.activeView === "workouts" && e(WorkoutBuilder, { state, dispatch }),
             state.activeView === "analytics" && e(Analytics, { state }),
             state.activeView === "settings" && e(DataSettings, { state, dispatch, onPushToSheets: () => syncToSheets(state), onPullFromSheets: async () => {
