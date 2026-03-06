@@ -90,7 +90,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.45.1";
+  const APP_VERSION = "2.46.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1548,6 +1548,60 @@ null,
     const w = state.workouts[s.workoutId];
     const [showSwap, setShowSwap] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [collapsed, setCollapsed] = useState({});
+    const cardRefs = useRef([]);
+
+    // Determine which exercise is "active" (first with unfilled work sets)
+    const activeExIdx = useMemo(() => {
+      for (var i = 0; i < s.exercises.length; i++) {
+        var workSets = s.exercises[i].sets.filter(st => !st.warmup && (st.rir === undefined || st.rir !== 3));
+        if (workSets.some(st => !st.weight || !st.reps)) return i;
+      }
+      return -1; // all done
+    }, [s.exercises]);
+
+    const isExDone = (ex) => {
+      var workSets = ex.sets.filter(st => !st.warmup && (st.rir === undefined || st.rir !== 3));
+      return workSets.length > 0 && workSets.every(st => st.weight > 0 && st.reps > 0);
+    };
+
+    // Auto-collapse: when an exercise becomes done and isn't the active one
+    useEffect(() => {
+      var next = {};
+      s.exercises.forEach(function(ex, i) {
+        if (isExDone(ex) && i !== activeExIdx) next[i] = true;
+      });
+      setCollapsed(function(prev) {
+        // Only auto-collapse newly completed; preserve manual un-collapses
+        var updated = {};
+        for (var k in next) {
+          if (prev[k] === false) continue; // user manually expanded this
+          updated[k] = true;
+        }
+        for (var k2 in prev) { if (prev[k2] === false) updated[k2] = false; }
+        return updated;
+      });
+    }, [activeExIdx, s.exercises]);
+
+    // Auto-scroll to active exercise on mount
+    useEffect(() => {
+      if (activeExIdx >= 0 && cardRefs.current[activeExIdx]) {
+        setTimeout(function() {
+          if (cardRefs.current[activeExIdx]) cardRefs.current[activeExIdx].scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+      }
+    }, []);
+
+    const toggleCollapse = (ei) => setCollapsed(function(p) { var n = {...p}; n[ei] = !p[ei]; return n; });
+
+    const exSummary = (ex) => {
+      var workSets = ex.sets.filter(st => !st.warmup && (st.rir === undefined || st.rir !== 3));
+      if (workSets.length === 0) return ex.sets.length + " sets";
+      var maxW = Math.max(...workSets.map(st => st.weight));
+      var reps = workSets.map(st => st.reps);
+      var allSame = reps.every(r => r === reps[0]);
+      return workSets.length + "\u00D7" + (allSame ? reps[0] : reps.join("/")) + " @ " + maxW + " " + state.weightUnit;
+    };
 
     // Previous weights per exercise from history (for ghost placeholders)
     const prevWeights = useMemo(() => {
@@ -1596,41 +1650,60 @@ null,
           opt.label,
         )),
       ),
-      s.exercises.map((ex, ei) => e("div", { key: ex.exerciseId+ei, className: "card" },
-        e("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 12 } },
-          e("div", { style: { fontWeight: 600 } }, ex.name),
-          e("button", { style: { background:"none",border:"none",color:"#f97316",cursor:"pointer",fontSize:12 }, onClick: ()=>setShowSwap(showSwap===ei?null:ei) }, "Swap"),
-        ),
-        showSwap === ei && e("div", { style: { background: "#3f3f46", borderRadius: 8, padding: 12, marginBottom: 12 } },
-          e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 8 } }, "Alternatives:"),
-          getAlts(ei).length > 0
-            ? getAlts(ei).map(alt => e("button", { key: alt, style: { display: "block", width: "100%", textAlign: "left", padding: "6px 8px", borderRadius: 4, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onClick: ()=>swap(ei,alt) }, alt))
-            : e("p", { style: { fontSize: 12, color: "#52525b" } }, "No alternatives defined."),
-        ),
-        // Header row
-        e("div", { style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 132px 20px", gap: 4, marginBottom: 4, alignItems: "center" } },
-          e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
-          e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, state.weightUnit),
-          e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "Reps"),
-          e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "RIR"),
-          e("div"),
-        ),
-        ex.sets.map((set, si) => {
-          const rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToRir(set.effort) : 2);
-          const isWarmup = set.warmup || rir === 3;
-          const ghostW = (prevWeights[ex.name] || [])[si];
-          return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 132px 20px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
-            e("div", { style: { fontSize: 12, color: "#71717a", textAlign: "center" } }, si+1),
-            e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight || "", placeholder: ghostW ? String(ghostW) : state.weightUnit, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%", textAlign: "center" } }),
-            e("input", { name: "setReps", type: "number", min: 0, value: set.reps || "", placeholder: "reps", onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%", textAlign: "center" } }),
-            e("div", { className: "rir-pills" },
-              RIR_OPTIONS.map(opt => e("button", { key: opt.value, className: "rir-pill", style: { background: rir===opt.value ? opt.color : "#27272a", color: rir===opt.value ? (opt.value===3?"#a1a1aa":"#000") : "#52525b" }, onClick: () => updSet(ei,si,{rir:opt.value,warmup:opt.value===3}) }, opt.short))
+      s.exercises.map((ex, ei) => {
+        var done = isExDone(ex);
+        var isActive = ei === activeExIdx;
+        var isCollapsed = collapsed[ei] === true;
+        var cardStyle = { transition: "all 0.2s" };
+        if (isActive) { cardStyle.border = "2px solid #f97316"; cardStyle.boxShadow = "0 0 16px rgba(249,115,22,0.15)"; }
+        else if (done) { cardStyle.opacity = isCollapsed ? 1 : 0.55; }
+
+        return e("div", { key: ex.exerciseId+ei, ref: function(el) { cardRefs.current[ei] = el; }, className: "card", style: cardStyle },
+          // ── Header ──
+          e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isCollapsed ? 0 : 12, cursor: done ? "pointer" : "default" }, onClick: done ? function() { toggleCollapse(ei); } : undefined },
+            e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+              e("div", { style: { fontWeight: 600 } }, ex.name),
+              done && e("span", { style: { fontSize: 11, color: "#4ade80", fontWeight: 600 } }, "\u2713"),
             ),
-            e("button", { onClick: ()=>remSet(ei,si), style: { background:"none",border:"none",color:"#52525b",cursor:"pointer",fontSize:12 } }, "✕"),
-          );
-        }),
-        e("button", { className: "btn btn-ghost", style: { width: "100%", fontSize: 12, padding: 6, marginTop: 4 }, onClick: ()=>addSet(ei) }, "+ Add Set"),
-      )),
+            isCollapsed
+              ? e("span", { style: { fontSize: 12, color: "#71717a" } }, exSummary(ex))
+              : e("button", { style: { background:"none",border:"none",color:"#f97316",cursor:"pointer",fontSize:12 }, onClick: function(ev) { ev.stopPropagation(); setShowSwap(showSwap===ei?null:ei); } }, "Swap"),
+          ),
+          // ── Collapsed: nothing else ──
+          // ── Expanded: full sets ──
+          !isCollapsed && [
+            showSwap === ei && e("div", { key: "swap", style: { background: "#3f3f46", borderRadius: 8, padding: 12, marginBottom: 12 } },
+              e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 8 } }, "Alternatives:"),
+              getAlts(ei).length > 0
+                ? getAlts(ei).map(alt => e("button", { key: alt, style: { display: "block", width: "100%", textAlign: "left", padding: "6px 8px", borderRadius: 4, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onClick: ()=>swap(ei,alt) }, alt))
+                : e("p", { style: { fontSize: 12, color: "#52525b" } }, "No alternatives defined."),
+            ),
+            // Header row
+            e("div", { key: "hdr", style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 132px 20px", gap: 4, marginBottom: 4, alignItems: "center" } },
+              e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
+              e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, state.weightUnit),
+              e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "Reps"),
+              e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "RIR"),
+              e("div"),
+            ),
+            ex.sets.map((set, si) => {
+              const rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToRir(set.effort) : 2);
+              const isWarmup = set.warmup || rir === 3;
+              const ghostW = (prevWeights[ex.name] || [])[si];
+              return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 132px 20px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
+                e("div", { style: { fontSize: 12, color: "#71717a", textAlign: "center" } }, si+1),
+                e("input", { name: "setWeight", type: "number", min: 0, step: state.weightUnit==="kg"?2:5, value: set.weight || "", placeholder: ghostW ? String(ghostW) : state.weightUnit, onInput: ev => updSet(ei,si,"weight",parseFloat(ev.target.value)||0), className: "input input-sm", style: { width: "100%", textAlign: "center" } }),
+                e("input", { name: "setReps", type: "number", min: 0, value: set.reps || "", placeholder: "reps", onInput: ev => updSet(ei,si,"reps",parseInt(ev.target.value)||0), className: "input input-sm", style: { width: "100%", textAlign: "center" } }),
+                e("div", { className: "rir-pills" },
+                  RIR_OPTIONS.map(opt => e("button", { key: opt.value, className: "rir-pill", style: { background: rir===opt.value ? opt.color : "#27272a", color: rir===opt.value ? (opt.value===3?"#a1a1aa":"#000") : "#52525b" }, onClick: () => updSet(ei,si,{rir:opt.value,warmup:opt.value===3}) }, opt.short))
+                ),
+                e("button", { onClick: ()=>remSet(ei,si), style: { background:"none",border:"none",color:"#52525b",cursor:"pointer",fontSize:12 } }, "\u2715"),
+              );
+            }),
+            e("button", { key: "add", className: "btn btn-ghost", style: { width: "100%", fontSize: 12, padding: 6, marginTop: 4 }, onClick: ()=>addSet(ei) }, "+ Add Set"),
+          ],
+        );
+      }),
       e("div", { style: { fontSize: 11, color: "#52525b", textAlign: "center", padding: "4px 0" } }, "Warmup sets (W) are excluded from stats and PRs."),
       e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: ()=>dispatch({type:"SAVE_WORKOUT"}) }, s.editingDate ? "Update Workout" : "Save Workout"),
       s.editingDate && e("div", { style: { display: "flex", gap: 8, marginTop: 8 } },
