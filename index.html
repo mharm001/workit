@@ -45,8 +45,8 @@
     .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(249,115,22,0.05); }
     .tab-icon { font-size: 16px; display: flex; justify-content: center; margin-bottom: 2px; }
     .grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-    .rir-pills { display: flex; gap: 4px; }
-    .rir-pill { padding: 5px 8px; border-radius: 6px; border: none; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; min-width: 28px; text-align: center; }
+    .intensity-pills { display: flex; gap: 4px; }
+    .intensity-pill { padding: 5px 6px; border-radius: 6px; border: none; font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.15s; min-width: 32px; text-align: center; }
     select { background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; padding: 8px 32px 8px 12px; color: #fff; font-size: 14px; outline: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 8px center; background-repeat: no-repeat; background-size: 1.2em; }
     select:focus { border-color: var(--accent); }
     .flex-center { display: flex; align-items: center; justify-content: center; }
@@ -97,7 +97,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.51.0";
+  const APP_VERSION = "2.52.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -344,17 +344,17 @@
   // Module-level fast hash: sum char codes of up to 200 chars + length suffix.
   // Defined here (not inside App) so it is never recreated per render.
   const _quickHash = (s) => { var h=0; for(var i=0;i<Math.min(s.length,200);i++) h=(h*31+s.charCodeAt(i))|0; return h+":"+s.length; };
-  // RIR scale: F=Failure, M=Moderate (1-2 RIR), L=Light (3-4 RIR), W=Warmup
-  const RIR_OPTIONS = [
-    { value: 0, label: "Failure", short: "F", color: "#ef4444" },
-    { value: 1, label: "Moderate 1-2 RIR", short: "M", color: "#fb923c" },
-    { value: 2, label: "Light 3-4 RIR", short: "L", color: "#facc15" },
+  // Intensity scale: MAX=Maxed Out, HARD=Pushed Hard, LITE=Light Effort, W=Warmup
+  const INTENSITY_OPTIONS = [
+    { value: 0, label: "Maxed Out", short: "MAX", color: "#ef4444" },
+    { value: 1, label: "Pushed Hard", short: "HARD", color: "#fb923c" },
+    { value: 2, label: "Light Effort", short: "LITE", color: "#facc15" },
     { value: 3, label: "Warmup", short: "W", color: "#71717a" },
   ];
-  const rirColor = (v) => (RIR_OPTIONS.find(r=>r.value===v)||RIR_OPTIONS[1]).color;
-  const rirLabel = (v) => (RIR_OPTIONS.find(r=>r.value===v)||RIR_OPTIONS[1]).short;
-  // Legacy effort → RIR migration: map old 1-10 effort to new RIR
-  const effortToRir = (v) => v >= 9 ? 0 : v >= 7 ? 1 : v >= 4 ? 2 : 3;
+  const intensityColor = (v) => (INTENSITY_OPTIONS.find(r=>r.value===v)||INTENSITY_OPTIONS[1]).color;
+  const intensityLabel = (v) => (INTENSITY_OPTIONS.find(r=>r.value===v)||INTENSITY_OPTIONS[1]).short;
+  // Legacy effort → intensity migration: map old 1-10 effort to new intensity values
+  const effortToIntensity = (v) => v >= 9 ? 0 : v >= 7 ? 1 : v >= 4 ? 2 : 3;
   // Strength Score: Epley e1RM = weight × (1 + reps/30). Returns 0 for bodyweight/invalid.
   const calcE1RM = (weight, reps) => (weight > 0 && reps > 0) ? Math.round(weight * (1 + reps / 30)) : 0;
 
@@ -437,7 +437,7 @@
       this.spreadsheetId = data.spreadsheetId;
       await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values:batchUpdate", { method:"POST", body: JSON.stringify({ valueInputOption:"RAW", data:[
         {range:"config!A1:B1",values:[["key","value"]]},
-        {range:"history!A1:H1",values:[["Date","Workout","Exercise","Set #","Reps","Weight","RIR","Warmup"]]},
+        {range:"history!A1:H1",values:[["Date","Workout","Exercise","Set #","Reps","Weight","Intensity","Warmup"]]},
         {range:"weight!A1:C1",values:[["Date","Weight (lbs)","Body Fat %"]]}
       ]})});
       return this.spreadsheetId;
@@ -453,13 +453,13 @@
       if (values.length > 0) await this._fetch(SHEETS_API+"/"+this.spreadsheetId+"/values/"+encodeURIComponent(range)+"?valueInputOption=RAW",{method:"PUT",body:JSON.stringify({range,values})});
     },
 
-    // ── Flatten history entries into rows: Date | Workout | Exercise | Set# | Reps | Weight | RIR | Warmup
+    // ── Flatten history entries into rows: Date | Workout | Exercise | Set# | Reps | Weight | Intensity | Warmup
     _flattenHistory(history) {
-      const rows = [["Date","Workout","Exercise","Set #","Reps","Weight","RIR","Warmup"]];
+      const rows = [["Date","Workout","Exercise","Set #","Reps","Weight","Intensity","Warmup"]];
       history.forEach(function(entry) {
         (entry.exercises||[]).forEach(function(ex) {
           (ex.sets||[]).forEach(function(set, si) {
-            var rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToRir(set.effort) : 2);
+            var rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToIntensity(set.effort) : 2);
             var warmup = set.warmup || rir === 3;
             rows.push([entry.date, entry.workoutName||"Unknown", ex.name, si+1, set.reps, set.weight, rir, warmup?"Y":"N"]);
           });
@@ -477,8 +477,8 @@
         if (!groups[key]) groups[key] = { date: r[0], workoutId: null, workoutName: r[1]||"Unknown", wasOverride: false, exercises: {} };
         var exName = r[2]||"";
         if (!groups[key].exercises[exName]) groups[key].exercises[exName] = { exerciseId: exName, name: exName, sets: [] };
-        // Support both old (7-col effort) and new (8-col RIR+warmup) format
-        var rir = r.length >= 8 ? (r[6] != null && r[6] !== "" ? parseInt(r[6]) : 2) : (r[6] !== undefined ? effortToRir(parseInt(r[6])||5) : 2);
+        // Support both old (7-col effort) and new (8-col intensity+warmup) format
+        var rir = r.length >= 8 ? (r[6] != null && r[6] !== "" ? parseInt(r[6]) : 2) : (r[6] !== undefined ? effortToIntensity(parseInt(r[6])||5) : 2);
         var warmup = r.length >= 8 ? r[7]==="Y" : false;
         groups[key].exercises[exName].sets.push({ reps: parseInt(r[4])||0, weight: parseFloat(r[5])||0, rir: rir, warmup: warmup });
       });
@@ -535,7 +535,7 @@
       if (!this.spreadsheetId) return;
       await Promise.all([
         this._clearAndWrite("config!A1:B200", [["key","value"]]),
-        this._clearAndWrite("history!A1:H50000", [["Date","Workout","Exercise","Set #","Reps","Weight","RIR","Warmup"]]),
+        this._clearAndWrite("history!A1:H50000", [["Date","Workout","Exercise","Set #","Reps","Weight","Intensity","Warmup"]]),
         this._clearAndWrite("weight!A1:C1000", [["Date","Weight (lbs)","Body Fat %"]]),
       ]);
     },
@@ -853,7 +853,7 @@
             e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 20 } },
               e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "#525252", marginBottom: 10 } }, "What is Workit?"),
               e("p", { style: { fontSize: 12, color: "#71717a", lineHeight: 1.6, margin: 0 } },
-                "A free workout tracker that saves your data to a Google Sheet you own. Create custom workouts, log reps, weight, and RIR per set, and track your progress over time. Works offline \u2014 syncs when you\u2019re back online."),
+                "A free workout tracker that saves your data to a Google Sheet you own. Create custom workouts, log reps, weight, and intensity per set, and track your progress over time. Works offline \u2014 syncs when you\u2019re back online."),
             ),
             // Privacy & Trust
             e("div", { style: { borderTop: "1px solid #1f1f1f", paddingTop: 20 } },
@@ -1120,22 +1120,21 @@
 
     // Render stat blocks for a workout entry
     const renderWorkoutStats = (stats) => {
-      return e("div", { style: { display: "flex", gap: 6 } },
-        e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center" } },
+      return e("div", { style: { display: "flex", gap: 6, alignItems: "stretch" } },
+        e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" } },
           e("div", { style: { fontSize: 15, fontWeight: 700, color: "#f4f4f5" } }, stats.totalSets),
           e("div", { style: { fontSize: 9, color: "#71717a" } }, "sets"),
         ),
-        e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center" } },
+        e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" } },
           e("div", { style: { fontSize: 15, fontWeight: 700, color: "#f97316" } }, stats.totalVol >= 1000 ? (stats.totalVol/1000).toFixed(1) + "k" : stats.totalVol),
           e("div", { style: { fontSize: 9, color: "#71717a" } }, "volume"),
         ),
-        stats.avgRir !== null && e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center" } },
-          e("div", { style: { fontSize: 15, fontWeight: 700, color: rirColor(Math.round(stats.avgRir)) } }, stats.avgRir.toFixed(1) + " " + rirLabel(Math.round(stats.avgRir))),
-          e("div", { style: { fontSize: 9, color: "#71717a" } }, "avg RIR"),
+        stats.avgRir !== null && e("div", { style: { flex: 1, background: "#27272a", borderRadius: 8, padding: "6px 8px", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" } },
+          e("div", { style: { fontSize: 15, fontWeight: 700, color: intensityColor(Math.round(stats.avgRir)) } }, intensityLabel(Math.round(stats.avgRir))),
+          e("div", { style: { fontSize: 9, color: "#71717a" } }, "intensity"),
         ),
-        stats.improved && e("div", { style: { flex: 2, background: stats.improved.delta > 0 ? "rgba(22,163,74,0.15)" : "#27272a", border: stats.improved.delta > 0 ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", borderRadius: 8, padding: "5px 8px", textAlign: "center" } },
-          e("div", { style: { fontSize: 9, color: "#71717a", textTransform: "uppercase", letterSpacing: 0.5 } }, stats.improved.delta > 0 ? "Most Improved" : "Top Lift"),
-          e("div", { style: { fontSize: 12, fontWeight: 700, color: stats.improved.delta > 0 ? "#4ade80" : "#22d3ee" } }, stats.improved.name.split(" ").slice(0,2).join(" ")),
+        stats.improved && e("div", { style: { flex: 2, background: stats.improved.delta > 0 ? "rgba(22,163,74,0.15)" : "#27272a", border: stats.improved.delta > 0 ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", borderRadius: 8, padding: "6px 8px", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" } },
+          e("div", { style: { fontSize: 13, fontWeight: 700, color: stats.improved.delta > 0 ? "#4ade80" : "#22d3ee", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, stats.improved.name.split(" ").slice(0,2).join(" ")),
           e("div", { style: { fontSize: 9, color: "#a1a1aa" } }, stats.improved.weight + state.weightUnit + "\u00d7" + stats.improved.reps + (stats.improved.delta > 0 ? " \u2191" + stats.improved.delta : "")),
         ),
       );
@@ -1354,6 +1353,17 @@
             ]
         ),
       ),
+      // Recent workouts
+      state.history.length > 0 && e("div", { className: "card", style: alreadyTracked ? { borderLeft: "3px solid #4ade80" } : undefined },
+        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+          e("div", { className: "label", style: { margin: 0 } }, "Recent Workouts"),
+          reversedHistory.length > 1 && e("button", { style: { background: "none", border: "none", padding: "4px 8px", cursor: "pointer", color: "#71717a", fontSize: 12 }, onClick: () => setShowPast(!showPast) }, showPast ? "\u25B2" : "\u25BC"),
+        ),
+        // Always show last workout — with Edit button if it's today's
+        reversedHistory.length > 0 && renderPastEntry(reversedHistory[0], undefined, reversedHistory[0].date === todayStr),
+        // Expanded: show older workouts
+        showPast && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
+      ),
       // Body metrics
       e("div", { className: "card" },
         e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
@@ -1370,17 +1380,6 @@
         state.weightLog.some(w => w.date === todayStr) && e("div", { style: { fontSize: 12, color: "#4ade80", marginTop: 8 } },
           (() => { const t = state.weightLog.find(w => w.date === todayStr); return "Today: " + (t.weight||"—") + " " + state.weightUnit + (t.bodyFat != null ? " · " + t.bodyFat + "% bf" : ""); })()
         ),
-      ),
-      // Recent workouts
-      state.history.length > 0 && e("div", { className: "card", style: alreadyTracked ? { borderLeft: "3px solid #4ade80" } : undefined },
-        e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-          e("div", { className: "label", style: { margin: 0 } }, "Recent Workouts"),
-          reversedHistory.length > 1 && e("button", { style: { background: "none", border: "none", padding: "4px 8px", cursor: "pointer", color: "#71717a", fontSize: 12 }, onClick: () => setShowPast(!showPast) }, showPast ? "\u25B2" : "\u25BC"),
-        ),
-        // Always show last workout — with Edit button if it's today's
-        reversedHistory.length > 0 && renderPastEntry(reversedHistory[0], undefined, reversedHistory[0].date === todayStr),
-        // Expanded: show older workouts
-        showPast && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
       ),
     );
   }
@@ -1810,7 +1809,7 @@
         e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>dispatch({type:"CANCEL_TRACKING"}) }, "Cancel"),
       ),
       e("div", { style: { display: "flex", gap: 12, flexWrap: "wrap", padding: "4px 0" } },
-        RIR_OPTIONS.map(opt => e("span", { key: opt.value, style: { fontSize: 11, color: "#71717a", display: "flex", alignItems: "center", gap: 4 } },
+        INTENSITY_OPTIONS.map(opt => e("span", { key: opt.value, style: { fontSize: 11, color: "#71717a", display: "flex", alignItems: "center", gap: 4 } },
           e("span", { style: { display: "inline-block", width: 14, height: 14, borderRadius: 3, background: opt.color, textAlign: "center", lineHeight: "14px", fontSize: 9, fontWeight: 700, color: opt.value===3?"#a1a1aa":"#000" } }, opt.short),
           opt.label,
         )),
@@ -1838,23 +1837,23 @@
           // ── Expanded: full sets ──
           !isCollapsed && [
             // Header row
-            e("div", { key: "hdr", style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 132px 20px", gap: 4, marginBottom: 4, alignItems: "center" } },
+            e("div", { key: "hdr", style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 148px 20px", gap: 4, marginBottom: 4, alignItems: "center" } },
               e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
               e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, state.weightUnit),
               e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "Reps"),
-              e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "RIR"),
+              e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "Intensity"),
               e("div"),
             ),
             ex.sets.map((set, si) => {
-              const rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToRir(set.effort) : 2);
+              const rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToIntensity(set.effort) : 2);
               const isWarmup = set.warmup || rir === 3;
               const ghostW = (prevWeights[ex.name] || [])[si];
-              return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 132px 20px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
+              return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 148px 20px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
                 e("div", { style: { fontSize: 12, color: "#71717a", textAlign: "center" } }, si+1),
                 e(NumericStepper, { name: "setWeight", value: set.weight || 0, onChange: v => updSet(ei,si,"weight",v), step: state.weightUnit === "kg" ? 2.5 : 5, min: 0, placeholder: ghostW ? String(ghostW) : state.weightUnit, inputMode: "decimal" }),
                 e(NumericStepper, { name: "setReps", value: set.reps || 0, onChange: v => updSet(ei,si,"reps",Math.round(v)), step: 1, min: 0, max: 99, placeholder: "reps", inputMode: "numeric" }),
-                e("div", { className: "rir-pills" },
-                  RIR_OPTIONS.map(opt => e("button", { key: opt.value, className: "rir-pill", style: { background: rir===opt.value ? opt.color : "#27272a", color: rir===opt.value ? (opt.value===3?"#a1a1aa":"#000") : "#52525b" }, onClick: () => updSet(ei,si,{rir:opt.value,warmup:opt.value===3}) }, opt.short))
+                e("div", { className: "intensity-pills" },
+                  INTENSITY_OPTIONS.map(opt => e("button", { key: opt.value, className: "intensity-pill", style: { background: rir===opt.value ? opt.color : "#27272a", color: rir===opt.value ? (opt.value===3?"#a1a1aa":"#000") : "#52525b" }, onClick: () => updSet(ei,si,{rir:opt.value,warmup:opt.value===3}) }, opt.short))
                 ),
                 e("button", { onClick: ()=>remSet(ei,si), style: { background:"none",border:"none",color:"#52525b",cursor:"pointer",fontSize:12 } }, "\u2715"),
               );
@@ -2006,21 +2005,21 @@
       ),
       // Intensity trend
       intensityTrend.length >= 2 && e("div", { className: "card" },
-        e("div", { className: "label", style: { marginBottom: 8 } }, "Intensity Trend (Avg RIR)"),
+        e("div", { className: "label", style: { marginBottom: 8 } }, "Intensity Trend"),
         (function(){
           var d=intensityTrend,w=340,h=140,pad=40;
           var pts=d.map(function(p,i){
             var x=pad+(i/(d.length-1))*(w-pad*2);
-            var y=pad+((p.avgRir)/2.5)*(h-pad*2); // 0(failure)=top, 2.5(light)=bottom
+            var y=pad+((2.5-p.avgRir)/2.5)*(h-pad*2); // 0(MAX)=top, 2.5(LITE)=bottom — inverted so higher effort = higher on chart
             var c=p.avgRir<=0.5?"#ef4444":p.avgRir<=1.5?"#fb923c":"#facc15";
             return{x:x,y:y,c:c,date:p.date,v:p.avgRir};
           });
           var pathD=pts.map(function(p,i){return(i===0?"M":"L")+p.x+","+p.y}).join(" ");
           return e("div",{style:{overflowX:"auto"}},
             e("svg",{width:w,height:h,viewBox:"0 0 "+w+" "+h,style:{display:"block",margin:"0 auto"}},
-              // Y labels: F at top, L at bottom
-              [["F",0],["M",1],["L",2]].map(function(pair){
-                var yy=pad+(pair[1]/2.5)*(h-pad*2);
+              // Y labels: MAX at top, LITE at bottom
+              [["MAX",0],["HARD",1],["LITE",2]].map(function(pair){
+                var yy=pad+((2.5-pair[1])/2.5)*(h-pad*2);
                 var col=pair[1]===0?"#ef4444":pair[1]===1?"#fb923c":"#facc15";
                 return e("g",{key:pair[0]},
                   e("line",{x1:pad,y1:yy,x2:w-pad,y2:yy,stroke:"#3f3f46",strokeDasharray:"3,3"}),
@@ -2036,7 +2035,7 @@
               pts.map(function(p,i){return e("circle",{key:i,cx:p.x,cy:p.y,r:4,fill:p.c})}),
             ),
             e("div",{style:{display:"flex",justifyContent:"center",gap:12,marginTop:6}},
-              RIR_OPTIONS.filter(function(o){return o.value!==3}).map(function(o){return e("span",{key:o.value,style:{fontSize:10,color:"#71717a",display:"flex",alignItems:"center",gap:3}},
+              INTENSITY_OPTIONS.filter(function(o){return o.value!==3}).map(function(o){return e("span",{key:o.value,style:{fontSize:10,color:"#71717a",display:"flex",alignItems:"center",gap:3}},
                 e("span",{style:{width:8,height:8,borderRadius:"50%",background:o.color,display:"inline-block"}}),o.short)}),
             ),
           );
@@ -2057,10 +2056,10 @@
             e(MiniLineChart, { data: exTrend, dataKey: "strengthScore", color: "#22d3ee", width: 340, height: 160, label: "Strength Score (est. 1RM)" }),
           ),
           exTrend.length >= 2 && e("div", { style: { marginTop: 12, borderTop: "1px solid #3f3f46", paddingTop: 12 } },
-            e("div", { style: { fontSize: 11, color: "#71717a", marginBottom: 4 } }, "Avg Intensity (RIR)"),
+            e("div", { style: { fontSize: 11, color: "#71717a", marginBottom: 4 } }, "Avg Intensity"),
             e("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } },
               exTrend.map(function(p,i){var c=p.avgRir<=0.5?"#ef4444":p.avgRir<=1.5?"#fb923c":"#facc15";return e("div",{key:i,style:{display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
-                e("div",{style:{width:20,height:20,borderRadius:4,background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#000"}},p.avgRir<=0.5?"F":p.avgRir<=1.5?"M":"L"),
+                e("div",{style:{width:20,height:20,borderRadius:4,background:c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#000"}},p.avgRir<=0.5?"MAX":p.avgRir<=1.5?"HARD":"LITE"),
                 e("div",{style:{fontSize:7,color:"#52525b"}},p.date),
               )}),
             ),
@@ -2203,7 +2202,7 @@
           [
             ["1.", "Create workouts", "Define exercises, sets, and reps in the Workouts tab. Choose from 200+ exercises across 12 muscle groups."],
             ["2.", "Set your schedule", "Use Weekly mode to assign workouts to specific days, or Split mode to rotate through a cycle."],
-            ["3.", "Track daily", "Open the app, start today\u2019s workout, and log reps, weight, and RIR (Reps in Reserve) per set. Mark warmup sets separately."],
+            ["3.", "Track daily", "Open the app, start today\u2019s workout, and log reps, weight, and intensity (MAX/HARD/LITE) per set. Mark warmup sets separately."],
             ["4.", "Review progress", "Check the Stats tab for trends in volume, weight, and Strength Score over time. Warmup sets are excluded from analytics."],
           ].map(function(item) {
             return e("div", { key: item[0], style: { display: "flex", gap: 10 } },
