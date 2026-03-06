@@ -97,7 +97,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.50.0";
+  const APP_VERSION = "2.51.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1090,19 +1090,19 @@
     const alreadyTracked = !!todayEntry;
     // Compute summary stats for any history entry
     const getWorkoutStats = (entry) => {
-      const workSets = entry.exercises.flatMap(ex => ex.sets.filter(s => !s.warmup));
+      const workSets = entry.exercises.flatMap(ex => ex.sets.filter(s => !s.warmup && (s.rir === undefined || s.rir !== 3)));
       const totalSets = workSets.length;
       const totalVol = workSets.reduce((a, s) => a + s.reps * s.weight, 0);
       const avgRir = workSets.length > 0 ? Math.round(workSets.reduce((a, s) => a + (s.rir !== undefined ? s.rir : 2), 0) / workSets.length * 10) / 10 : null;
       // Most improved
       const prevBests = {};
-      state.history.filter(h => h.date < entry.date).forEach(h => h.exercises.forEach(ex => ex.sets.filter(s => !s.warmup).forEach(s => {
+      state.history.filter(h => h.date < entry.date).forEach(h => h.exercises.forEach(ex => ex.sets.filter(s => !s.warmup && (s.rir === undefined || s.rir !== 3)).forEach(s => {
         const sc = calcE1RM(s.weight, s.reps); if (!sc) return;
         if (!prevBests[ex.name] || sc > prevBests[ex.name]) prevBests[ex.name] = sc;
       })));
       var improved = null;
       entry.exercises.forEach(ex => {
-        const topSet = ex.sets.filter(s => !s.warmup).reduce((b, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b.score ? { weight: s.weight, reps: s.reps, score: sc } : b; }, { score: 0 });
+        const topSet = ex.sets.filter(s => !s.warmup && (s.rir === undefined || s.rir !== 3)).reduce((b, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b.score ? { weight: s.weight, reps: s.reps, score: sc } : b; }, { score: 0 });
         if (topSet.score > 0 && prevBests[ex.name]) {
           const delta = topSet.score - prevBests[ex.name];
           if (delta > 0 && (!improved || delta > improved.delta)) improved = { name: ex.name, delta: delta, weight: topSet.weight, reps: topSet.reps, score: topSet.score };
@@ -1110,7 +1110,7 @@
       });
       if (!improved) {
         const best = entry.exercises.reduce((b, ex) => {
-          const top = ex.sets.filter(s => !s.warmup).reduce((b2, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b2.score ? { name: ex.name, weight: s.weight, reps: s.reps, score: sc } : b2; }, { score: 0 });
+          const top = ex.sets.filter(s => !s.warmup && (s.rir === undefined || s.rir !== 3)).reduce((b2, s) => { const sc = calcE1RM(s.weight, s.reps); return sc > b2.score ? { name: ex.name, weight: s.weight, reps: s.reps, score: sc } : b2; }, { score: 0 });
           return top.score > b.score ? top : b;
         }, { score: 0 });
         if (best.score > 0) improved = { name: best.name, delta: 0, weight: best.weight, reps: best.reps, score: best.score };
@@ -1183,7 +1183,7 @@
       var now = new Date(); var thisWeekStart = new Date(now); thisWeekStart.setDate(thisWeekStart.getDate() - 6);
       var lastWeekEnd = new Date(thisWeekStart); lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
       var lastWeekStart = new Date(lastWeekEnd); lastWeekStart.setDate(lastWeekStart.getDate() - 6);
-      var volCalc = function(h) { return h.exercises.reduce(function(a, ex) { return a + ex.sets.filter(function(s){return !s.warmup}).reduce(function(b, s){return b + s.reps * s.weight}, 0); }, 0); };
+      var volCalc = function(h) { return h.exercises.reduce(function(a, ex) { return a + ex.sets.filter(function(s){return !s.warmup&&(s.rir===undefined||s.rir!==3)}).reduce(function(b, s){return b + s.reps * s.weight}, 0); }, 0); };
       var thisVol = state.history.filter(function(h){return h.date >= toDateStr(thisWeekStart) && h.date <= toDateStr(now)}).reduce(function(a,h){return a+volCalc(h)},0);
       var lastVol = state.history.filter(function(h){return h.date >= toDateStr(lastWeekStart) && h.date <= toDateStr(lastWeekEnd)}).reduce(function(a,h){return a+volCalc(h)},0);
       var volDelta = lastVol > 0 ? Math.round((thisVol - lastVol) / lastVol * 100) : 0;
@@ -1403,7 +1403,6 @@
     };
 
     if (wl.length === 0) return e("div", { className: "fade-in", style: { padding: 16 } },
-      e("h2", { style: { fontSize: 20, fontWeight: 700, marginBottom: 16 } }, "Schedule Setup"),
       e("div", { className: "card", style: { textAlign: "center", padding: 32 } },
         e("p", { className: "text-muted", style: { marginBottom: 12 } }, "Create some workouts first."),
         e("button", { className: "btn btn-accent", onClick: () => dispatch({type:"SET_VIEW",view:"workouts"}) }, "Go to Workouts"),
@@ -1411,10 +1410,6 @@
     );
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
-      e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-        e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, "Schedule Setup"),
-null,
-      ),
       // Toggle
       e("div", { style: { display: "flex", background: "#27272a", borderRadius: 8, padding: 4 } },
         ["weekly","cadence"].map(t => {
@@ -1975,7 +1970,7 @@ null,
         if(!r[x.name])r[x.name]={weight:s.weight,reps:s.reps,date:h.date,e1rm:e1rm,prevE1rm:0};
         else if(e1rm>r[x.name].e1rm){r[x.name]={prevE1rm:r[x.name].e1rm,weight:s.weight,reps:s.reps,date:h.date,e1rm:e1rm};}
       })));
-      var now=new Date();var cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-14);var cutStr=cutoff.toISOString().slice(0,10);
+      var now=new Date();var cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-14);var cutStr=toDateStr(cutoff);
       var all=Object.entries(r).filter(([,v])=>v.e1rm>0).map(([name,pr])=>({
         name:name,cat:getExerciseCategory(name)||"Other",e1rm:pr.e1rm,weight:pr.weight,reps:pr.reps,date:pr.date,
         delta:pr.prevE1rm>0?pr.e1rm-pr.prevE1rm:0,isRecent:pr.date>=cutStr
@@ -1988,12 +1983,10 @@ null,
     },[state.history]);
 
     if (state.history.length === 0) return e("div", { style: { padding: 16 } },
-      e("h2", { style: { fontSize: 20, fontWeight: 700, marginBottom: 16 } }, "Analytics"),
       e("div", { className: "card", style: { textAlign: "center", padding: 32 } }, e("p", { className: "text-muted" }, "No data yet. Start tracking!"))
     );
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
-      e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Analytics"),
       // Body composition
       (weightData.length > 1 || bfData.length > 1) && e("div", { className: "card" },
         e("div", { className: "label" }, "Body Composition"),
@@ -2159,7 +2152,6 @@ null,
         onConfirm: () => setImportError(null),
         onCancel: () => setImportError(null),
       }),
-      e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Data Management"),
       e("div", { className: "card", style: { display: "flex", flexDirection: "column", gap: 16 } },
         e("div", null,
           e("div", { style: { fontSize: 14, fontWeight: 500, marginBottom: 4 } }, "Google Sheets Sync"),
@@ -2215,7 +2207,6 @@ null,
   // ═══════════════════════════════════════════════════════════════════
   function GuideTab() {
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
-      e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Guide"),
       // ── How It Works ──
       e("div", { className: "card" },
         e("div", { className: "label" }, "How It Works"),
