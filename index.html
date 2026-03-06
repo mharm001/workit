@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.33.0";
+  const APP_VERSION = "2.34.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -429,7 +429,7 @@
         var exName = r[2]||"";
         if (!groups[key].exercises[exName]) groups[key].exercises[exName] = { exerciseId: exName, name: exName, sets: [] };
         // Support both old (7-col effort) and new (8-col RIR+warmup) format
-        var rir = r.length >= 8 ? (parseInt(r[6])||2) : (r[6] !== undefined ? effortToRir(parseInt(r[6])||5) : 2);
+        var rir = r.length >= 8 ? (r[6] != null && r[6] !== "" ? parseInt(r[6]) : 2) : (r[6] !== undefined ? effortToRir(parseInt(r[6])||5) : 2);
         var warmup = r.length >= 8 ? r[7]==="Y" : false;
         groups[key].exercises[exName].sets.push({ reps: parseInt(r[4])||0, weight: parseFloat(r[5])||0, rir: rir, warmup: warmup });
       });
@@ -441,7 +441,7 @@
     async loadAll() {
       // Try reading all tabs, including legacy "workouts" tab for backward compat
       const [configRows, historyRows, weightRows] = await Promise.all([
-        this._getValues("config!A2:B200"), this._getValues("history!A2:G50000"), this._getValues("weight!A2:C1000")
+        this._getValues("config!A2:B200"), this._getValues("history!A2:H50000"), this._getValues("weight!A2:C1000")
       ]);
       // Also try legacy workouts tab (old format had separate workouts sheet)
       let legacyWorkoutRows = [];
