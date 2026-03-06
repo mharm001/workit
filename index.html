@@ -90,7 +90,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.45.0";
+  const APP_VERSION = "2.45.1";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1107,45 +1107,48 @@
         ),
       ),
       // Today's workout
-      e("div", { className: "card", style: alreadyTracked ? { borderLeft: "3px solid #4ade80" } : {} },
-        todayW ? (alreadyTracked ? [
-          // ── Completed summary ──
-          e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 10 } },
-            e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-              e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayW.name),
-              e("div", { style: { background: "rgba(22,101,52,0.6)", borderRadius: 6, padding: "3px 8px" } },
-                e("span", { style: { color: "#4ade80", fontSize: 12, fontWeight: 600 } }, "\u2713 Done"),
-              ),
+      alreadyTracked ? e("div", { className: "card", style: { borderLeft: "3px solid #4ade80" } },
+        // ── Completed summary (works whether cadence advanced or not) ──
+        e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 10 } },
+          e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+            e("div", { style: { fontSize: 20, fontWeight: 700 } }, todayEntry.workoutName || (state.workouts[todayEntry.workoutId]||{}).name || "Workout"),
+            e("div", { style: { background: "rgba(22,101,52,0.6)", borderRadius: 6, padding: "3px 8px" } },
+              e("span", { style: { color: "#4ade80", fontSize: 12, fontWeight: 600 } }, "\u2713 Done"),
             ),
-            (() => {
-              var nextDay = null, nextW = null;
-              if (state.scheduleType === "weekly") {
-                var todayIdx = DAYS.indexOf(todayDay());
-                for (var di = 1; di <= 7; di++) {
-                  var idx = (todayIdx + di) % 7;
-                  var slot = state.weeklySchedule.find(s => s.day === DAYS[idx]);
-                  if (slot && slot.workoutId && state.workouts[slot.workoutId]) {
-                    nextDay = di === 1 ? "Tomorrow" : DAY_LABELS[DAYS[idx]];
-                    nextW = state.workouts[slot.workoutId].name;
-                    break;
-                  }
+          ),
+          (() => {
+            var nextDay = null, nextW = null;
+            if (state.scheduleType === "weekly") {
+              var todayIdx = DAYS.indexOf(todayDay());
+              for (var di = 1; di <= 7; di++) {
+                var idx = (todayIdx + di) % 7;
+                var slot = state.weeklySchedule.find(s => s.day === DAYS[idx]);
+                if (slot && slot.workoutId && state.workouts[slot.workoutId]) {
+                  nextDay = di === 1 ? "Tomorrow" : DAY_LABELS[DAYS[idx]];
+                  nextW = state.workouts[slot.workoutId].name;
+                  break;
                 }
-              } else if (state.cadenceSchedule.rotation.length > 0) {
-                var ni = (state.cadenceSchedule.currentIndex) % state.cadenceSchedule.rotation.length;
+              }
+            } else if (state.cadenceSchedule.rotation.length > 0) {
+              for (var ci = 0; ci < state.cadenceSchedule.rotation.length; ci++) {
+                var ni = (state.cadenceSchedule.currentIndex + ci) % state.cadenceSchedule.rotation.length;
                 var ns = state.cadenceSchedule.rotation[ni];
                 if (ns && ns.workoutId && state.workouts[ns.workoutId]) {
                   nextDay = "Next"; nextW = state.workouts[ns.workoutId].name;
+                  break;
                 }
               }
-              return nextW ? e("div", { style: { textAlign: "right" } },
-                e("div", { style: { fontSize: 10, color: "#71717a" } }, "Up next"),
-                e("div", { style: { fontSize: 13, fontWeight: 600, color: "#f97316" } }, nextDay + " " + nextW),
-              ) : null;
-            })(),
-          ),
-          e("div", { key: "s", style: { marginBottom: 10 } }, renderWorkoutStats(getWorkoutStats(todayEntry))),
-          e("button", { key: "b", className: "btn btn-accent", style: { width: "100%" }, onClick: () => editWorkout(todayEntry) }, "Edit Workout"),
-        ] : [
+            }
+            return nextW ? e("div", { style: { textAlign: "right" } },
+              e("div", { style: { fontSize: 10, color: "#71717a" } }, "Up next"),
+              e("div", { style: { fontSize: 13, fontWeight: 600, color: "#f97316" } }, nextDay + " " + nextW),
+            ) : null;
+          })(),
+        ),
+        e("div", { key: "s", style: { marginBottom: 10 } }, renderWorkoutStats(getWorkoutStats(todayEntry))),
+        e("button", { key: "b", className: "btn btn-accent", style: { width: "100%" }, onClick: () => editWorkout(todayEntry) }, "Edit Workout"),
+      ) : e("div", { className: "card" },
+        todayW ? [
           // ── Not yet tracked ──
           e("div", { key: "h", style: { display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 } },
             e("div", null,
@@ -1164,7 +1167,7 @@
               e("button", { key: w.id, className: "btn btn-dark", style: { textAlign: "left", width: "100%" }, onClick: () => startTracking(w.id, true) }, w.name + " (" + w.exercises.length + " exercises)")
             ),
           ),
-        ]) : e("div", { style: { textAlign: "center", padding: "24px 0" } },
+        ] : e("div", { style: { textAlign: "center", padding: "24px 0" } },
           e("p", { className: "text-muted", style: { marginBottom: 12 } }, workoutList.length === 0 ? "No workouts created yet" : "Rest day"),
           workoutList.length === 0
             ? e("button", { className: "btn btn-accent", onClick: () => dispatch({type:"SET_VIEW",view:"workouts"}) }, "Create Your First Workout")
@@ -1199,16 +1202,10 @@
           e("div", { className: "label", style: { margin: 0 } }, "Recent Workouts"),
           e("span", { style: { fontSize: 12, color: "#71717a" } }, showPast ? "\u25B2" : "\u25BC"),
         ),
-        // Always show last workout summary
-        (() => {
-          const last = state.history[state.history.length - 1];
-          if (!last || last.date === todayStr) { const prev = state.history.length > 1 ? state.history[state.history.length - 2] : null; if (!prev) return null; return renderPastEntry(prev); }
-          return renderPastEntry(last);
-        })(),
+        // Always show last workout
+        reversedHistory.length > 0 && renderPastEntry(reversedHistory[0]),
         // Expanded: show more past workouts
-        showPast && reversedHistory.filter(h => h.date !== todayStr).slice(1, 8).map((entry, i) =>
-          renderPastEntry(entry, i)
-        ),
+        showPast && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
       ),
       // Week preview
       state.scheduleType === "weekly" && e("div", { className: "card" },
