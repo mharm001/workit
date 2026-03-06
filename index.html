@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.37.0";
+  const APP_VERSION = "2.38.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1891,12 +1891,32 @@
       saveLocal(state);
     }, [state, authState]);
 
-    // ── 3. Sync to Sheets (background, non-blocking)
+    // ── 3. Sync to Sheets (background, non-blocking, with token refresh on 401)
     const syncToSheets = useCallback(async (st) => {
       if(!sheetsService.accessToken||!sheetsService.spreadsheetId) { setSyncStatus("offline"); return; }
       setSyncing(true); setSyncStatus("");
-      try{ await sheetsService.saveAll(st); setSyncStatus("synced"); }
-      catch(ex){ console.warn("Sync:",ex); setSyncStatus("error"); }
+      try{
+        await sheetsService.saveAll(st);
+        setSyncStatus("synced");
+      } catch(ex) {
+        // If 401/403 (token expired), try silent re-auth and retry once
+        if (ex.message && (ex.message.includes("401") || ex.message.includes("403") || ex.message.toLowerCase().includes("invalid")) && typeof google !== "undefined" && google.accounts) {
+          try {
+            const newToken = await new Promise((resolve, reject) => {
+              const c = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
+                callback: r => r.error ? reject(r) : resolve(r.access_token),
+              });
+              c.requestAccessToken({ prompt: "" });
+            });
+            sheetsService.accessToken = newToken;
+            await sheetsService.saveAll(st);
+            setSyncStatus("synced");
+          } catch(retryEx) { console.warn("Sync retry failed:", retryEx); setSyncStatus("error"); }
+        } else {
+          console.warn("Sync:", ex); setSyncStatus("error");
+        }
+      }
       finally{ setSyncing(false); }
     }, []);
 
@@ -1904,13 +1924,15 @@
     // (prevHistory/prevWeightLog refs removed — replaced by prevDataHash in effect 5a)
 
     // ── 4b. Debounced sync on state changes (only when authenticated)
+    // 500ms for config changes (schedule, workouts), 2000ms during active tracking
     useEffect(() => {
       if(authState !== "ready") return;
       const{activeView,trackingSession,...cur}=state;
       if(prevState.current){const{activeView:_,trackingSession:__,...prev}=prevState.current;if(JSON.stringify(cur)===JSON.stringify(prev))return;}
       prevState.current=state;
       if(syncTimeout.current)clearTimeout(syncTimeout.current);
-      syncTimeout.current=setTimeout(()=>syncToSheets(state),2000);
+      const delay = state.trackingSession ? 2000 : 500;
+      syncTimeout.current=setTimeout(()=>syncToSheets(state),delay);
     }, [state, authState, syncToSheets]);
 
     // ── 5. Connect to Sheets (shared by login + reconnect)
