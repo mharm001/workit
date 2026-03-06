@@ -90,7 +90,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.46.0";
+  const APP_VERSION = "2.47.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -355,7 +355,12 @@
   // Build a reverse lookup: exercise name → category
   const _exCatMap = {};
   Object.entries(EXERCISE_LIBRARY).forEach(([cat, exs]) => exs.forEach(ex => { _exCatMap[ex.name] = cat; }));
-  const getExerciseCategory = (name) => _exCatMap[name] || null;
+  const getExerciseCategory = (name) => {
+    if (_exCatMap[name]) return _exCatMap[name];
+    var lc = name.toLowerCase();
+    for (var k in _exCatMap) { if (k.toLowerCase().startsWith(lc) || lc.startsWith(k.toLowerCase())) return _exCatMap[k]; }
+    return null;
+  };
 
   // ─── Local Storage ─────────────────────────────────────────────────
   function saveLocal(state) {
@@ -1566,13 +1571,15 @@ null,
     };
 
     // Auto-collapse: when an exercise becomes done and isn't the active one
+    // Skip auto-collapse when editing — all exercises already have data
+    const prevActiveRef = useRef(activeExIdx);
     useEffect(() => {
+      if (s.editingDate) return; // don't auto-collapse in edit mode
       var next = {};
       s.exercises.forEach(function(ex, i) {
         if (isExDone(ex) && i !== activeExIdx) next[i] = true;
       });
       setCollapsed(function(prev) {
-        // Only auto-collapse newly completed; preserve manual un-collapses
         var updated = {};
         for (var k in next) {
           if (prev[k] === false) continue; // user manually expanded this
@@ -1581,7 +1588,8 @@ null,
         for (var k2 in prev) { if (prev[k2] === false) updated[k2] = false; }
         return updated;
       });
-    }, [activeExIdx, s.exercises]);
+      prevActiveRef.current = activeExIdx;
+    }, [activeExIdx, s.exercises, s.editingDate]);
 
     // Auto-scroll to active exercise on mount
     useEffect(() => {
@@ -1630,11 +1638,17 @@ null,
       const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,sets:ex.sets.filter((_,j)=>j!==si)});
       dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}});
     };
+    const [swapSearch, setSwapSearch] = useState("");
     const swap = (ei,nm) => {
       const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,name:nm,exerciseId:uid()});
-      dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}}); setShowSwap(null);
+      dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}}); setShowSwap(null); setSwapSearch("");
     };
     const getAlts = ei => (w && w.exercises[ei]) ? w.exercises[ei].alternatives || [] : [];
+    const getCategoryExercises = (exName) => {
+      var cat = getExerciseCategory(exName);
+      if (!cat || !EXERCISE_LIBRARY[cat]) return [];
+      return EXERCISE_LIBRARY[cat].map(function(e) { return e.name; });
+    };
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
       e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
@@ -1672,12 +1686,6 @@ null,
           // ── Collapsed: nothing else ──
           // ── Expanded: full sets ──
           !isCollapsed && [
-            showSwap === ei && e("div", { key: "swap", style: { background: "#3f3f46", borderRadius: 8, padding: 12, marginBottom: 12 } },
-              e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 8 } }, "Alternatives:"),
-              getAlts(ei).length > 0
-                ? getAlts(ei).map(alt => e("button", { key: alt, style: { display: "block", width: "100%", textAlign: "left", padding: "6px 8px", borderRadius: 4, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onClick: ()=>swap(ei,alt) }, alt))
-                : e("p", { style: { fontSize: 12, color: "#52525b" } }, "No alternatives defined."),
-            ),
             // Header row
             e("div", { key: "hdr", style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 132px 20px", gap: 4, marginBottom: 4, alignItems: "center" } },
               e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
@@ -1719,6 +1727,52 @@ null,
         onConfirm: () => { setShowDeleteConfirm(false); dispatch({type:"DELETE_HISTORY_ENTRY",date:s.editingDate,workoutId:s.workoutId}); },
         onCancel: () => setShowDeleteConfirm(false),
       }),
+      // ── Swap Bottom Sheet ──
+      showSwap !== null && (() => {
+        var ex = s.exercises[showSwap];
+        if (!ex) return null;
+        var alts = getAlts(showSwap);
+        var catExercises = getCategoryExercises(ex.name);
+        var cat = getExerciseCategory(ex.name);
+        // Exclude current exercise and predefined alts from catalog list
+        var currentNames = new Set([ex.name].concat(alts));
+        var catalogList = catExercises.filter(function(n) { return !currentNames.has(n); });
+        // Apply search filter
+        var q = swapSearch.toLowerCase();
+        if (q) catalogList = catalogList.filter(function(n) { return n.toLowerCase().includes(q); });
+        return e("div", { style: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "15vh" }, onClick: function() { setShowSwap(null); setSwapSearch(""); } },
+          e("div", { style: { background: "#1c1c1e", borderRadius: 16, width: "calc(100% - 32px)", maxWidth: 480, maxHeight: "70vh", display: "flex", flexDirection: "column", overflow: "hidden" }, onClick: function(ev) { ev.stopPropagation(); } },
+            // Drag handle
+            e("div", { style: { display: "flex", justifyContent: "center", padding: "10px 0 4px" } },
+              e("div", { style: { width: 32, height: 4, borderRadius: 2, background: "#3f3f46" } }),
+            ),
+            // Title
+            e("div", { style: { padding: "8px 16px 12px", borderBottom: "1px solid #27272a" } },
+              e("div", { style: { fontSize: 15, fontWeight: 600, color: "#fff" } }, "Swap " + ex.name),
+            ),
+            // Scrollable content
+            e("div", { style: { overflowY: "auto", padding: "0 16px 16px", flex: 1 } },
+              // Predefined alternatives
+              alts.length > 0 && e("div", { style: { paddingTop: 12 } },
+                e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "#71717a", marginBottom: 8 } }, "Alternatives"),
+                alts.map(function(alt) {
+                  return e("button", { key: alt, style: { display: "block", width: "100%", textAlign: "left", padding: "12px", borderRadius: 8, border: "none", background: "#27272a", color: "#e4e4e7", fontSize: 14, cursor: "pointer", marginBottom: 6 }, onClick: function() { swap(showSwap, alt); } }, alt);
+                }),
+              ),
+              // Category catalog
+              cat && e("div", { style: { paddingTop: 12 } },
+                e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "#71717a", marginBottom: 8 } }, "More " + cat.charAt(0).toUpperCase() + cat.slice(1) + " Exercises"),
+                e("input", { type: "text", placeholder: "Search " + cat + "...", value: swapSearch, onInput: function(ev) { setSwapSearch(ev.target.value); }, className: "input", style: { marginBottom: 8, fontSize: 14 } }),
+                catalogList.length > 0 ? catalogList.slice(0, 20).map(function(name) {
+                  return e("button", { key: name, style: { display: "block", width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#a1a1aa", fontSize: 13, cursor: "pointer" }, onClick: function() { swap(showSwap, name); } }, name);
+                }) : swapSearch && e("div", { style: { padding: "12px 0", textAlign: "center", color: "#52525b", fontSize: 13 } }, "No matches for \u201c" + swapSearch + "\u201d"),
+              ),
+              // No category found
+              !cat && alts.length === 0 && e("div", { style: { padding: "20px 0", textAlign: "center", color: "#52525b", fontSize: 13 } }, "No alternatives available for this exercise."),
+            ),
+          ),
+        );
+      })(),
     );
   }
 
