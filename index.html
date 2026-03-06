@@ -9,6 +9,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0c0c0c">
+  <link rel="manifest" href="manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230c0c0c'/><rect x='3' y='12' width='4' height='17' rx='1.5' fill='%23f97316' opacity='.8'/><rect x='9' y='8' width='4' height='21' rx='1.5' fill='%23f97316'/><rect x='15' y='4' width='4' height='25' rx='1.5' fill='%23f97316'/><rect x='21' y='14' width='4' height='15' rx='1.5' fill='%23f97316' opacity='.6'/><rect x='27' y='10' width='4' height='19' rx='1.5' fill='%23f97316' opacity='.9'/></svg>">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:;">
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" integrity="sha384-HtMZLkYo+pR5/u7zCzXxMJP6QoNnQJt1qkHM0EaOPvGDIzaVZbmYr/TlvUZ/sKAg">
@@ -80,7 +81,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.40.0";
+  const APP_VERSION = "2.41.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -2122,6 +2123,10 @@
   }
 
   ReactDOM.createRoot(document.getElementById("root")).render(e(App));
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
 })();
 </script>
 </body>
