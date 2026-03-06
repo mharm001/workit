@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.34.0";
+  const APP_VERSION = "2.35.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1894,8 +1894,7 @@
     }, []);
 
     // ── 4a. Refs for auto-reconnect (effect is after connectSheets below)
-    const prevHistory = useRef(null);
-    const prevWeightLog = useRef(null);
+    // (prevHistory/prevWeightLog refs removed — replaced by prevDataHash in effect 5a)
 
     // ── 4b. Debounced sync on state changes (only when authenticated)
     useEffect(() => {
@@ -1940,18 +1939,18 @@
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, [state]);
 
-    // ── 5a. Auto-reconnect when data changes while offline (save, edit, delete workout, log weight)
-    const prevHistoryHash = useRef(null);
+    // ── 5a. Auto-reconnect when ANY data changes while offline
+    const prevDataHash = useRef(null);
     useEffect(() => {
       var histHash = JSON.stringify(state.history).length + ":" + state.history.length;
       var weightHash = state.weightLog.length;
-      if (prevHistoryHash.current === null) { prevHistoryHash.current = histHash; prevHistory.current = state.history.length; prevWeightLog.current = weightHash; return; }
-      var historyChanged = histHash !== prevHistoryHash.current;
-      var weightChanged = weightHash !== prevWeightLog.current;
-      prevHistoryHash.current = histHash;
-      prevHistory.current = state.history.length;
-      prevWeightLog.current = weightHash;
-      if ((historyChanged || weightChanged) && authState === "offline" && typeof google !== "undefined" && google.accounts) {
+      var workoutHash = Object.keys(state.workouts).length + ":" + JSON.stringify(state.workouts).length;
+      var schedHash = JSON.stringify(state.weeklySchedule).length + ":" + JSON.stringify(state.cadenceSchedule).length;
+      var dataHash = histHash + "|" + weightHash + "|" + workoutHash + "|" + schedHash;
+      if (prevDataHash.current === null) { prevDataHash.current = dataHash; return; }
+      var changed = dataHash !== prevDataHash.current;
+      prevDataHash.current = dataHash;
+      if (changed && authState === "offline" && typeof google !== "undefined" && google.accounts) {
         try {
           var client = google.accounts.oauth2.initTokenClient({
             client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
@@ -1960,7 +1959,7 @@
           client.requestAccessToken();
         } catch(ex) { /* stay offline, data is safe in localStorage */ }
       }
-    }, [state.history, state.weightLog.length, authState, connectSheets]);
+    }, [state.history, state.weightLog.length, state.workouts, state.weeklySchedule, state.cadenceSchedule, authState, connectSheets]);
 
     // ── 6. Manual login (first time or re-auth)
     const handleLogin = useCallback(async (token) => {
