@@ -57,6 +57,16 @@ npx serve -l 4782
 
 Add `http://localhost:4782` to your Google OAuth Client ID's authorized JavaScript origins in the [GCP Console](https://console.cloud.google.com/apis/credentials).
 
+## Updating the Installed PWA
+
+If the app doesn't update after a new deploy, the old service worker may still be serving cached files. To force an update:
+
+- **Android:** Settings > Apps > WorkIt > Storage > Clear Cache, then reopen
+- **iOS:** Delete the app from home screen, revisit the URL, re-add to home screen
+- **Desktop:** Open DevTools > Application > Service Workers > Unregister, then hard refresh
+
+This is a one-time issue from before the service worker used network-first for HTML. Future updates will apply automatically on reload.
+
 ## Privacy
 
 Runs entirely in your browser. The only external calls are to Google's OAuth and Sheets APIs. Your data lives in a Google Sheet in your own Drive. The `drive.file` scope ensures the app can never see or modify any other file.
