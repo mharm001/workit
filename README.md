@@ -28,6 +28,23 @@ A personal workout tracker PWA that syncs to Google Sheets. Single HTML file —
 
 Single `index.html` file. React 18 (UMD), vanilla CSS, custom SVG charts. No build tools, no bundler, no framework CLI. Google Identity Services for auth, Sheets API v4 for persistence.
 
+## Testing
+
+The test suite runs in Node.js without a browser — it simulates the React state, localStorage, and Google Sheets API to cover sync flows, reducer logic, edge cases, and data round-trip integrity.
+
+```bash
+# Run all tests
+bash tests/run-tests.sh
+
+# Run individual suites
+node tests/test-sync.js            # 61 tests — login/logout, offline sync, push/pull, auto-reconnect triggers
+node tests/test-reducer.js         # 54 tests — workout CRUD, scheduling, tracking sessions, weight logging
+node tests/test-edge-cases.js      # 26 tests — boundary conditions, null handling, large history
+node tests/test-history-roundtrip.js  # 30 tests — Sheets serialization fidelity, RIR/warmup preservation
+```
+
+Requires Node.js 18+. No dependencies to install.
+
 ## Privacy
 
 Runs entirely in your browser. The only external calls are to Google's OAuth and Sheets APIs. Your data lives in a Google Sheet in your own Drive. The `drive.file` scope ensures the app can never see or modify any other file.

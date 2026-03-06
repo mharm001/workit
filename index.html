@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.35.0";
+  const APP_VERSION = "2.36.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1672,7 +1672,7 @@
   // ═══════════════════════════════════════════════════════════════════
   // DATA / SETTINGS
   // ═══════════════════════════════════════════════════════════════════
-  function DataSettings({ state, dispatch, onForceSync, onReset }) {
+  function DataSettings({ state, dispatch, onPushToSheets, onPullFromSheets, onReset }) {
     const fileRef = useRef(null);
     const [status, setStatus] = useState("");
     const [resetConfirm, setResetConfirm] = useState(false);
@@ -1701,16 +1701,21 @@
       };
       reader.readAsText(file);
     };
-    const sync = async () => { setStatus("syncing"); try{await onForceSync();setStatus("done");setTimeout(()=>setStatus(""),2000);}catch(ex){setStatus("error");} };
+    const push = async () => { setStatus("pushing"); try{await onPushToSheets();setStatus("push-done");setTimeout(()=>setStatus(""),2000);}catch(ex){setStatus("error");} };
+    const pull = async () => { setStatus("pulling"); try{await onPullFromSheets();setStatus("pull-done");setTimeout(()=>setStatus(""),2000);}catch(ex){setStatus("error");} };
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
       e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Data Management"),
       e("div", { className: "card", style: { display: "flex", flexDirection: "column", gap: 16 } },
-        (state.history.length > 0 || Object.keys(state.workouts).length > 0 || state.weightLog.length > 0) && e("div", null,
-          e("div", { style: { fontSize: 14, fontWeight: 500, marginBottom: 4 } }, "Sync to Google Sheets"),
-          e("p", { className: "text-muted", style: { fontSize: 12, marginBottom: 12 } }, "Force a full sync of all data."),
-          e("button", { className: "btn btn-blue", style: { width: "100%" }, onClick: sync, disabled: status==="syncing" },
-            status==="syncing" ? "Syncing..." : status==="done" ? "Synced!" : "Sync Now"),
+        e("div", null,
+          e("div", { style: { fontSize: 14, fontWeight: 500, marginBottom: 4 } }, "Google Sheets Sync"),
+          e("p", { className: "text-muted", style: { fontSize: 12, marginBottom: 12 } }, "Push sends your local data to the sheet. Pull loads the sheet data into the app."),
+          e("div", { style: { display: "flex", gap: 8 } },
+            e("button", { className: "btn btn-blue", style: { flex: 1 }, onClick: push, disabled: status==="pushing"||status==="pulling" },
+              status==="pushing" ? "Pushing..." : status==="push-done" ? "Pushed!" : "Push to Sheet"),
+            e("button", { className: "btn btn-dark", style: { flex: 1, border: "1px solid #3f3f46" }, onClick: pull, disabled: status==="pushing"||status==="pulling" },
+              status==="pulling" ? "Pulling..." : status==="pull-done" ? "Pulled!" : "Pull from Sheet"),
+          ),
         ),
         e("hr", { style: { border: "none", borderTop: "1px solid #3f3f46" } }),
         e("div", null,
@@ -1940,13 +1945,11 @@
     }, [state]);
 
     // ── 5a. Auto-reconnect when ANY data changes while offline
+    // Simple fast hash: sum char codes of first 200 chars of each JSON block
+    const _quickHash = (s) => { var h=0; for(var i=0;i<Math.min(s.length,200);i++) h=(h*31+s.charCodeAt(i))|0; return h+":"+s.length; };
     const prevDataHash = useRef(null);
     useEffect(() => {
-      var histHash = JSON.stringify(state.history).length + ":" + state.history.length;
-      var weightHash = state.weightLog.length;
-      var workoutHash = Object.keys(state.workouts).length + ":" + JSON.stringify(state.workouts).length;
-      var schedHash = JSON.stringify(state.weeklySchedule).length + ":" + JSON.stringify(state.cadenceSchedule).length;
-      var dataHash = histHash + "|" + weightHash + "|" + workoutHash + "|" + schedHash;
+      var dataHash = _quickHash(JSON.stringify(state.history)) + "|" + _quickHash(JSON.stringify(state.weightLog)) + "|" + _quickHash(JSON.stringify(state.workouts)) + "|" + _quickHash(JSON.stringify(state.weeklySchedule)) + "|" + _quickHash(JSON.stringify(state.cadenceSchedule)) + "|" + state.scheduleType;
       if (prevDataHash.current === null) { prevDataHash.current = dataHash; return; }
       var changed = dataHash !== prevDataHash.current;
       prevDataHash.current = dataHash;
@@ -1959,7 +1962,7 @@
           client.requestAccessToken();
         } catch(ex) { /* stay offline, data is safe in localStorage */ }
       }
-    }, [state.history, state.weightLog.length, state.workouts, state.weeklySchedule, state.cadenceSchedule, authState, connectSheets]);
+    }, [state.history, state.weightLog, state.workouts, state.weeklySchedule, state.cadenceSchedule, state.scheduleType, authState, connectSheets]);
 
     // ── 6. Manual login (first time or re-auth)
     const handleLogin = useCallback(async (token) => {
@@ -2001,7 +2004,12 @@
             state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch }),
             state.activeView === "workouts" && e(WorkoutBuilder, { state, dispatch }),
             state.activeView === "analytics" && e(Analytics, { state }),
-            state.activeView === "settings" && e(DataSettings, { state, dispatch, onForceSync: () => syncToSheets(state), onReset: async () => {
+            state.activeView === "settings" && e(DataSettings, { state, dispatch, onPushToSheets: () => syncToSheets(state), onPullFromSheets: async () => {
+              if(!sheetsService.accessToken||!sheetsService.spreadsheetId) throw new Error("Not connected");
+              const remoteData = await sheetsService.loadAll();
+              dispatch({type:"LOAD_FROM_SHEETS", data: remoteData});
+              prevState.current = {...makeInitialState(), ...remoteData};
+            }, onReset: async () => {
               if (sheetsService.accessToken && sheetsService.spreadsheetId) await sheetsService.resetSpreadsheet();
               clearLocal();
               dispatch({type:"IMPORT_STATE",state:makeInitialState()});
