@@ -58,6 +58,12 @@
     .stat-box { background: var(--card); border-radius: 8px; padding: 12px; text-align: center; }
     .stat-num { font-size: 24px; font-weight: 700; color: var(--accent); }
     .stat-label { font-size: 11px; color: var(--muted); }
+    .login-cta-btn { width: 100%; padding: 16px 24px; border-radius: 12px; border: 2px solid var(--accent); background: transparent; color: var(--accent); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-transform: uppercase; letter-spacing: 1px; transition: background 0.2s, color 0.2s; }
+    .login-cta-btn:hover:not(:disabled) { background: var(--accent); color: #000; }
+    .login-info-btn { background: none; border: none; color: #525252; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 8px 0; transition: color 0.2s; }
+    .login-info-btn:hover { color: #a1a1aa; }
+    .lib-exercise-btn { text-align: left; padding: 8px 12px; border-radius: 6px; border: none; background: transparent; color: #e4e4e7; font-size: 13px; cursor: pointer; width: 100%; }
+    .lib-exercise-btn:hover { background: #3f3f46; }
   </style>
 </head>
 <body>
@@ -67,14 +73,14 @@
 (function() {
   "use strict";
   const e = React.createElement;
-  const { useState, useReducer, useRef, useCallback, useMemo, useEffect } = React;
+  const { useState, useReducer, useRef, useCallback, useMemo, useEffect, Component } = React;
 
   // ═══════════════════════════════════════════════════════════════════
   // CONFIG
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.39.0";
+  const APP_VERSION = "2.40.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -315,8 +321,12 @@
   const uid = () => Math.random().toString(36).slice(2, 10);
   const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
   const DAY_LABELS = {monday:"Mon",tuesday:"Tue",wednesday:"Wed",thursday:"Thu",friday:"Fri",saturday:"Sat",sunday:"Sun"};
+  // Module-level: called on every render in multiple components — no allocation benefit to inlining
   const todayDay = () => DAYS[new Date().getDay()===0?6:new Date().getDay()-1];
   const toDateStr = (d) => d.toISOString().split("T")[0];
+  // Module-level fast hash: sum char codes of up to 200 chars + length suffix.
+  // Defined here (not inside App) so it is never recreated per render.
+  const _quickHash = (s) => { var h=0; for(var i=0;i<Math.min(s.length,200);i++) h=(h*31+s.charCodeAt(i))|0; return h+":"+s.length; };
   // RIR scale: F=Failure, M=Moderate (1-2 RIR), L=Light (3-4 RIR), W=Warmup
   const RIR_OPTIONS = [
     { value: 0, label: "Failure", short: "F", color: "#ef4444" },
@@ -577,9 +587,36 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // ERROR BOUNDARY
+  // ═══════════════════════════════════════════════════════════════════
+  class ErrorBoundary extends Component {
+    constructor(props) {
+      super(props);
+      this.state = { hasError: false, error: null };
+    }
+    static getDerivedStateFromError(error) {
+      return { hasError: true, error };
+    }
+    componentDidCatch(error, info) {
+      console.error("[WorkIt ErrorBoundary]", error, info);
+    }
+    render() {
+      if (this.state.hasError) {
+        return e("div", { style: { padding: 32, textAlign: "center" } },
+          e("div", { style: { fontSize: 32, marginBottom: 12 } }, "⚠️"),
+          e("div", { style: { fontSize: 16, fontWeight: 700, color: "#f4f4f5", marginBottom: 8 } }, "Something went wrong"),
+          e("div", { style: { fontSize: 13, color: "#a1a1aa", marginBottom: 20 } }, this.state.error ? this.state.error.message : "An unexpected error occurred."),
+          e("button", { className: "btn btn-accent", onClick: () => this.setState({ hasError: false, error: null }) }, "Try again"),
+        );
+      }
+      return this.props.children;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // MINI CHART (SVG-based, no external dependency)
   // ═══════════════════════════════════════════════════════════════════
-  function MiniLineChart({ data, dataKey, width, height, color, label }) {
+  const MiniLineChart = React.memo(function MiniLineChart({ data, dataKey, width, height, color, label }) {
     if (!data || data.length < 2) return e("p", { style: { color: "#71717a", fontSize: 12, textAlign: "center", padding: "24px 0" } }, "Not enough data yet");
     const vals = data.map(d => d[dataKey]);
     const min = Math.min(...vals); const max = Math.max(...vals);
@@ -617,9 +654,9 @@
         label && e("text", { x: w/2, y: 12, textAnchor: "middle", fill: "#a1a1aa", fontSize: 10 }, label),
       )
     );
-  }
+  });
 
-  function MiniBarChart({ data, dataKey, width, height, color, label }) {
+  const MiniBarChart = React.memo(function MiniBarChart({ data, dataKey, width, height, color, label }) {
     if (!data || data.length === 0) return e("p", { style: { color: "#71717a", fontSize: 12, textAlign: "center", padding: "24px 0" } }, "No data");
     const vals = data.map(d => d[dataKey]);
     const max = Math.max(...vals) || 1;
@@ -649,9 +686,9 @@
         label && e("text", { x: w / 2, y: 12, textAnchor: "middle", fill: "#a1a1aa", fontSize: 10 }, label),
       )
     );
-  }
+  });
 
-  function BodyCompChart({ weightData, bfData, weightUnit, width, height }) {
+  const BodyCompChart = React.memo(function BodyCompChart({ weightData, bfData, weightUnit, width, height }) {
     const w = width || 340; const h = height || 170; const pad = 40; const rPad = 40;
     const hasW = weightData.length >= 2; const hasBf = bfData.length >= 2;
     if (!hasW && !hasBf) return e("p", { style: { color: "#71717a", fontSize: 12, textAlign: "center", padding: "24px 0" } }, "Not enough data yet");
@@ -699,7 +736,7 @@
         e("text", { x: pad + 108, y: 13, fill: "#a1a1aa", fontSize: 9 }, "Body Fat %"),
       )
     );
-  }
+  });
 
   // ═══════════════════════════════════════════════════════════════════
   // LOGIN SCREEN
@@ -754,11 +791,7 @@
                 })
               ),
               // CTA button
-              e("button", { onClick: handleLogin, disabled: loading, style: { width: "100%", padding: "16px 24px", borderRadius: 12, border: "2px solid #f97316",
-                background: "transparent", color: "#f97316", fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                textTransform: "uppercase", letterSpacing: 1, transition: "all 0.2s" },
-                onMouseOver: function(ev){ev.currentTarget.style.background="#f97316";ev.currentTarget.style.color="#000"},
-                onMouseOut: function(ev){ev.currentTarget.style.background="transparent";ev.currentTarget.style.color="#f97316"} },
+              e("button", { onClick: handleLogin, disabled: loading, className: "login-cta-btn" },
                 loading ? e("div", { className: "spinner", style: { width: 20, height: 20, borderWidth: 2 } }) :
                 [e("svg", { key: "g", width: 18, height: 18, viewBox: "0 0 48 48" },
                   e("path", { fill: "#EA4335", d: "M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" }),
@@ -772,8 +805,7 @@
           ),
           // ── Collapsible "Learn more" ──
           e("div", { style: { marginTop: 24, textAlign: "center" } },
-            e("button", { onClick: function() { setShowInfo(!showInfo); }, style: { background: "none", border: "none", color: "#525252", fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 0", transition: "color 0.2s" },
-              onMouseOver: function(ev){ev.currentTarget.style.color="#a1a1aa"}, onMouseOut: function(ev){ev.currentTarget.style.color="#525252"} },
+            e("button", { onClick: function() { setShowInfo(!showInfo); }, className: "login-info-btn" },
               showInfo ? "Hide details" : "How it works, privacy & install",
               e("span", { style: { fontSize: 10, transition: "transform 0.2s", display: "inline-block", transform: showInfo ? "rotate(180deg)" : "rotate(0deg)" } }, "\u25BC"),
             ),
@@ -825,14 +857,14 @@
     );
   }
 
-  function LoadingScreen({ message }) {
+  const LoadingScreen = React.memo(function LoadingScreen({ message }) {
     return e("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" } },
       e("div", { style: { textAlign: "center" } },
         e("div", { className: "spinner", style: { width: 40, height: 40, borderWidth: 4, margin: "0 auto 16px" } }),
         e("p", { className: "text-muted", style: { fontSize: 14 } }, message || "Loading..."),
       )
     );
-  }
+  });
 
   // ═══════════════════════════════════════════════════════════════════
   // NAV
@@ -849,7 +881,7 @@
     return Math.floor(hr / 24) + "d ago";
   }
 
-  function NavBar({ activeView, dispatch, isConnected, onSignOut, syncing, syncStatus, onReconnect, lastSyncedAt }) {
+  const NavBar = React.memo(function NavBar({ activeView, dispatch, isConnected, onSignOut, syncing, syncStatus, onReconnect, lastSyncedAt }) {
     const tabs = [{id:"dashboard",label:"Home",icon:"🏠"},{id:"schedule",label:"Schedule",icon:"📅"},{id:"workouts",label:"Workouts",icon:"💪"},{id:"analytics",label:"Stats",icon:"📊"},{id:"settings",label:"Data",icon:"⚙️"}];
     const statusDot = (syncStatus === "synced" || syncStatus === "empty") ? "#4ade80" : syncStatus === "offline" ? "#facc15" : syncStatus === "error" ? "#ef4444" : "#71717a";
     const statusText = syncing ? "" : syncStatus === "synced" ? "Synced" : syncStatus === "empty" ? "Connected · No data" : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync error" : "";
@@ -873,22 +905,22 @@
         ))
       )
     );
-  }
+  });
 
   // ═══════════════════════════════════════════════════════════════════
   // CONFIRM MODAL (themed replacement for native confirm())
   // ═══════════════════════════════════════════════════════════════════
-  function ConfirmModal({ message, onConfirm, onCancel }) {
+  const ConfirmModal = React.memo(function ConfirmModal({ message, onConfirm, onCancel, confirmLabel }) {
     return e("div", { style: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 24 } },
       e("div", { style: { background: "#1c1c1e", borderRadius: 16, padding: "24px 20px 16px", maxWidth: 320, width: "100%", textAlign: "center" } },
         e("div", { style: { fontSize: 15, color: "#f4f4f5", marginBottom: 20, lineHeight: 1.4 } }, message),
         e("div", { style: { display: "flex", gap: 10 } },
           e("button", { onClick: onCancel, style: { flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #3f3f46", background: "#27272a", color: "#a1a1aa", fontSize: 15, cursor: "pointer" } }, "Cancel"),
-          e("button", { onClick: onConfirm, style: { flex: 1, padding: "10px 0", borderRadius: 10, border: "none", background: "#ef4444", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" } }, "Delete"),
+          e("button", { onClick: onConfirm, style: { flex: 1, padding: "10px 0", borderRadius: 10, border: "none", background: "#ef4444", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" } }, confirmLabel || "Delete"),
         ),
       ),
     );
-  }
+  });
 
   // ═══════════════════════════════════════════════════════════════════
   // DASHBOARD
@@ -1008,6 +1040,9 @@
       }
       return { consistency: consistency, thisVol: thisVol, volDelta: volDelta, streak: streak, perWeek: perWeek };
     }, [state.history,state.weeklySchedule,state.cadenceSchedule,state.scheduleType]);
+
+    // Memoized reversed history — avoids creating a new array on every render pass
+    const reversedHistory = useMemo(() => state.history.slice().reverse(), [state.history]);
 
     const startTracking = (wid, isOverride) => {
       const w = state.workouts[wid]; if (!w) return;
@@ -1145,7 +1180,7 @@
           return renderPastEntry(last);
         })(),
         // Expanded: show more past workouts
-        showPast && state.history.slice().reverse().filter(h => h.date !== todayStr).slice(1, 8).map((entry, i) =>
+        showPast && reversedHistory.filter(h => h.date !== todayStr).slice(1, 8).map((entry, i) =>
           renderPastEntry(entry, i)
         ),
       ),
@@ -1231,11 +1266,11 @@
           e("div", { className: "card" },
             e("div", { className: "label" }, "Rest Days"),
             e("div", { style: { display: "flex", gap: 8 } },
-              ["manual","auto"].map(m => e("button", { key: m, style: { flex: 1, padding: "8px 0", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer", background: state.cadenceSchedule.restMode===m?"#f97316":"#3f3f46", color: state.cadenceSchedule.restMode===m?"#fff":"#a1a1aa" }, onClick: () => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{restMode:m}}); flash(); } }, m==="manual"?"I'll place them":"Auto every N days"))
+              ["manual","auto"].map(m => e("button", { key: m, style: { flex: 1, padding: "8px 0", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer", background: state.cadenceSchedule.restMode===m?"#f97316":"#3f3f46", color: state.cadenceSchedule.restMode===m?"#fff":"#a1a1aa" }, onClick: () => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{restMode:m}}); } }, m==="manual"?"I'll place them":"Auto every N days"))
             ),
             state.cadenceSchedule.restMode === "auto" && e("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 12 } },
               e("span", { style: { fontSize: 13, color: "#d4d4d8" } }, "Rest every"),
-              e("input", { name: "restEvery", type: "number", min: 1, max: 10, value: state.cadenceSchedule.autoRestEvery, onInput: ev => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{autoRestEvery:parseInt(ev.target.value)||3}}); flash(); }, className: "input input-sm" }),
+              e("input", { name: "restEvery", type: "number", min: 1, max: 10, value: state.cadenceSchedule.autoRestEvery, onInput: ev => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{autoRestEvery:parseInt(ev.target.value)||3}}); }, className: "input input-sm" }),
               e("span", { style: { fontSize: 13, color: "#d4d4d8" } }, "workout days"),
             ),
           ),
@@ -1362,7 +1397,7 @@
             e("button", { style: { background: "none", border: "none", color: "#71717a", fontSize: 11, cursor: "pointer", textDecoration: "underline" }, onClick: () => setShowAllCats(!showAllCats) }, showAllCats ? "Show only target muscles" : "Show all muscles")
           ),
           e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
-            (EXERCISE_LIBRARY[activeLibCat]||[]).map(ex => e("button", { key: ex.name, style: { textAlign: "left", padding: "8px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onMouseOver: function(ev){ev.target.style.background="#3f3f46"}, onMouseOut: function(ev){ev.target.style.background="transparent"}, onClick: () => addEx(ex) },
+            (EXERCISE_LIBRARY[activeLibCat]||[]).map(ex => e("button", { key: ex.name, className: "lib-exercise-btn", onClick: () => addEx(ex) },
               ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"×"+ex.defaultReps),
             ))
           ),
@@ -1695,6 +1730,7 @@
     const fileRef = useRef(null);
     const [status, setStatus] = useState("");
     const [resetConfirm, setResetConfirm] = useState(false);
+    const [importError, setImportError] = useState(null);
 
     const doReset = async () => {
       setStatus("resetting");
@@ -1715,8 +1751,8 @@
         try {
           const data = JSON.parse(e.target.result);
           if (data.workouts && data.history !== undefined) { dispatch({type:"IMPORT_STATE",state:data}); try{await sheetsService.saveAll(data)}catch(ex){} }
-          else alert("Invalid file.");
-        } catch(ex) { alert("Failed to parse JSON."); }
+          else setImportError("This file doesn't look like a valid Workit backup. Expected fields 'workouts' and 'history'.");
+        } catch(ex) { setImportError("Could not parse the file as JSON. Please choose a valid Workit backup file."); }
       };
       reader.readAsText(file);
     };
@@ -1724,6 +1760,12 @@
     const pull = async () => { setStatus("pulling"); try{await onPullFromSheets();setStatus("pull-done");setTimeout(()=>setStatus(""),2000);}catch(ex){setStatus("error");} };
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
+      importError && e(ConfirmModal, {
+        message: importError,
+        confirmLabel: "OK",
+        onConfirm: () => setImportError(null),
+        onCancel: () => setImportError(null),
+      }),
       e("h2", { style: { fontSize: 20, fontWeight: 700 } }, "Data Management"),
       e("div", { className: "card", style: { display: "flex", flexDirection: "column", gap: 16 } },
         e("div", null,
@@ -1875,6 +1917,8 @@
     const [loadMsg, setLoadMsg] = useState("Loading...");
     const syncTimeout = useRef(null);
     const prevState = useRef(null);
+    // stateRef always holds the latest state so callbacks (connectSheets) never close over a stale snapshot
+    const stateRef = useRef(null);
 
     // ── 1. On mount: restore session if user was active (signed in or mid-workout)
     //    Only explicit sign-out clears the session flag → sends to login.
@@ -1908,6 +1952,9 @@
       if (authState === "login" && Object.keys(state.workouts).length === 0 && state.history.length === 0) return;
       saveLocal(state);
     }, [state, authState]);
+
+    // ── 2b. Keep stateRef current so async callbacks always read the latest state
+    useEffect(() => { stateRef.current = state; }, [state]);
 
     // ── 3. Sync to Sheets (background, non-blocking, with token refresh on 401)
     const syncToSheets = useCallback(async (st) => {
@@ -1943,10 +1990,16 @@
 
     // ── 4b. Debounced sync on state changes (only when authenticated)
     // 500ms for config changes (schedule, workouts), 2000ms during active tracking
+    // Uses _quickHash (module-level) rather than full JSON.stringify for change detection —
+    // the actual state object is passed to syncToSheets which serializes it once for the API call.
     useEffect(() => {
       if(authState !== "ready") return;
-      const{activeView,trackingSession,...cur}=state;
-      if(prevState.current){const{activeView:_,trackingSession:__,...prev}=prevState.current;if(JSON.stringify(cur)===JSON.stringify(prev))return;}
+      if(prevState.current){
+        var curHash = _quickHash(JSON.stringify(state.history)) + "|" + _quickHash(JSON.stringify(state.workouts)) + "|" + _quickHash(JSON.stringify(state.weightLog)) + "|" + _quickHash(JSON.stringify(state.weeklySchedule)) + "|" + _quickHash(JSON.stringify(state.cadenceSchedule)) + "|" + state.scheduleType;
+        var {activeView:_a, trackingSession:_t, ...prev} = prevState.current;
+        var prevHash = _quickHash(JSON.stringify(prev.history)) + "|" + _quickHash(JSON.stringify(prev.workouts)) + "|" + _quickHash(JSON.stringify(prev.weightLog)) + "|" + _quickHash(JSON.stringify(prev.weeklySchedule)) + "|" + _quickHash(JSON.stringify(prev.cadenceSchedule)) + "|" + prev.scheduleType;
+        if(curHash === prevHash) return;
+      }
       prevState.current=state;
       if(syncTimeout.current)clearTimeout(syncTimeout.current);
       const delay = state.trackingSession ? 2000 : 500;
@@ -1963,8 +2016,8 @@
         if(!id) id=await sheetsService.createSpreadsheet();
         sheetsService.spreadsheetId=id;
         if (fromOffline) {
-          // Push local state to sheets first (preserves edits/deletes)
-          await sheetsService.saveAll(state);
+          // Read the latest state via ref to avoid stale closure — stateRef is always current
+          await sheetsService.saveAll(stateRef.current);
         }
         // Always pull from remote to ensure React state is populated
         const remoteData=await sheetsService.loadAll();
@@ -1984,11 +2037,10 @@
         setSyncStatus(wCount > 0 || hCount > 0 ? "synced" : "empty"); setLastSyncedAt(new Date());
         try{localStorage.setItem("workit_session","active")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
-    }, [state]);
+    }, []); // stateRef is a ref — stable identity, no need in dep array
 
     // ── 5a. Auto-reconnect when ANY data changes while offline
-    // Simple fast hash: sum char codes of first 200 chars of each JSON block
-    const _quickHash = (s) => { var h=0; for(var i=0;i<Math.min(s.length,200);i++) h=(h*31+s.charCodeAt(i))|0; return h+":"+s.length; };
+    // Compute a single state hash (module-level _quickHash reused — no per-render allocation)
     const prevDataHash = useRef(null);
     useEffect(() => {
       var dataHash = _quickHash(JSON.stringify(state.history)) + "|" + _quickHash(JSON.stringify(state.weightLog)) + "|" + _quickHash(JSON.stringify(state.workouts)) + "|" + _quickHash(JSON.stringify(state.weeklySchedule)) + "|" + _quickHash(JSON.stringify(state.cadenceSchedule)) + "|" + state.scheduleType;
@@ -2036,32 +2088,36 @@
     if(authState==="loading") return e(LoadingScreen, { message: loadMsg });
     if(authState==="login") return e(LoginScreen, { onLogin: handleLogin });
 
-    return e("div", { style: { minHeight: "100vh", background: "#18181b", color: "#fff", maxWidth: 480, margin: "0 auto" } },
-      state.activeView === "tracking" && state.trackingSession
-        ? e(TrackingSession, { state, dispatch })
-        : [
-          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, isConnected: authState==="ready", onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect, lastSyncedAt }),
-          e("div", { key: "content", style: { paddingBottom: 80 } },
-            state.activeView === "dashboard" && e(Dashboard, { state, dispatch }),
-            state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch, syncStatus, syncing }),
-            state.activeView === "workouts" && e(WorkoutBuilder, { state, dispatch }),
-            state.activeView === "analytics" && e(Analytics, { state }),
-            state.activeView === "settings" && e(DataSettings, { state, dispatch, onPushToSheets: () => syncToSheets(state), onPullFromSheets: async () => {
-              if(!sheetsService.accessToken||!sheetsService.spreadsheetId) throw new Error("Not connected");
-              const remoteData = await sheetsService.loadAll();
-              dispatch({type:"LOAD_FROM_SHEETS", data: remoteData});
-              prevState.current = {...makeInitialState(), ...remoteData};
-            }, onReset: async () => {
-              if (sheetsService.accessToken && sheetsService.spreadsheetId) await sheetsService.resetSpreadsheet();
-              clearLocal();
-              dispatch({type:"IMPORT_STATE",state:makeInitialState()});
-            }}),
-          ),
-          e("div", { key: "footer", style: { borderTop: "1px solid #1f1f1f", padding: "16px 16px 24px", marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } },
-            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "harmant.app/workit"),
-            e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "v" + APP_VERSION),
-          ),
-        ]
+    return e(ErrorBoundary, null,
+      e("div", { style: { minHeight: "100vh", background: "#18181b", color: "#fff", maxWidth: 480, margin: "0 auto" } },
+        state.activeView === "tracking" && state.trackingSession
+          ? e(ErrorBoundary, null, e(TrackingSession, { state, dispatch }))
+          : [
+            e(NavBar, { key: "nav", activeView: state.activeView, dispatch, isConnected: authState==="ready", onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect, lastSyncedAt }),
+            e(ErrorBoundary, { key: "content" },
+              e("div", { style: { paddingBottom: 80 } },
+                state.activeView === "dashboard" && e(Dashboard, { state, dispatch }),
+                state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch, syncStatus, syncing }),
+                state.activeView === "workouts" && e(WorkoutBuilder, { state, dispatch }),
+                state.activeView === "analytics" && e(Analytics, { state }),
+                state.activeView === "settings" && e(DataSettings, { state, dispatch, onPushToSheets: () => syncToSheets(state), onPullFromSheets: async () => {
+                  if(!sheetsService.accessToken||!sheetsService.spreadsheetId) throw new Error("Not connected");
+                  const remoteData = await sheetsService.loadAll();
+                  dispatch({type:"LOAD_FROM_SHEETS", data: remoteData});
+                  prevState.current = {...makeInitialState(), ...remoteData};
+                }, onReset: async () => {
+                  if (sheetsService.accessToken && sheetsService.spreadsheetId) await sheetsService.resetSpreadsheet();
+                  clearLocal();
+                  dispatch({type:"IMPORT_STATE",state:makeInitialState()});
+                }}),
+              )
+            ),
+            e("div", { key: "footer", style: { borderTop: "1px solid #1f1f1f", padding: "16px 16px 24px", marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" } },
+              e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "harmant.app/workit"),
+              e("span", { style: { fontSize: 11, color: "#2a2a2a", fontFamily: "monospace" } }, "v" + APP_VERSION),
+            ),
+          ]
+      )
     );
   }
 
