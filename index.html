@@ -10,9 +10,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0c0c0c">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230c0c0c'/><rect x='3' y='12' width='4' height='17' rx='1.5' fill='%23f97316' opacity='.8'/><rect x='9' y='8' width='4' height='21' rx='1.5' fill='%23f97316'/><rect x='15' y='4' width='4' height='25' rx='1.5' fill='%23f97316'/><rect x='21' y='14' width='4' height='15' rx='1.5' fill='%23f97316' opacity='.6'/><rect x='27' y='10' width='4' height='19' rx='1.5' fill='%23f97316' opacity='.9'/></svg>">
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:;">
+  <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" integrity="sha384-HtMZLkYo+pR5/u7zCzXxMJP6QoNnQJt1qkHM0EaOPvGDIzaVZbmYr/TlvUZ/sKAg">
+  <script crossorigin="anonymous" src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" integrity="sha384-tMH8h3BGESGckSAVGZ82T9n90ztNXxvdwvdM6UoR56cYcf+0iGXBliJ29D+wZ/x8"></script>
+  <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh"></script>
   <style>
     :root { --bg: #18181b; --card: #27272a; --border: #3f3f46; --muted: #a1a1aa; --accent: #f97316; }
     body { background: var(--bg); margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #fff; }
@@ -73,7 +74,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.38.0";
+  const APP_VERSION = "2.39.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -836,16 +837,32 @@
   // ═══════════════════════════════════════════════════════════════════
   // NAV
   // ═══════════════════════════════════════════════════════════════════
-  function NavBar({ activeView, dispatch, isConnected, onSignOut, syncing, syncStatus, onReconnect }) {
+  function _timeAgo(date) {
+    if (!date) return "";
+    var sec = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (sec < 10) return "just now";
+    if (sec < 60) return sec + "s ago";
+    var min = Math.floor(sec / 60);
+    if (min < 60) return min + "m ago";
+    var hr = Math.floor(min / 60);
+    if (hr < 24) return hr + "h ago";
+    return Math.floor(hr / 24) + "d ago";
+  }
+
+  function NavBar({ activeView, dispatch, isConnected, onSignOut, syncing, syncStatus, onReconnect, lastSyncedAt }) {
     const tabs = [{id:"dashboard",label:"Home",icon:"🏠"},{id:"schedule",label:"Schedule",icon:"📅"},{id:"workouts",label:"Workouts",icon:"💪"},{id:"analytics",label:"Stats",icon:"📊"},{id:"settings",label:"Data",icon:"⚙️"}];
     const statusDot = (syncStatus === "synced" || syncStatus === "empty") ? "#4ade80" : syncStatus === "offline" ? "#facc15" : syncStatus === "error" ? "#ef4444" : "#71717a";
     const statusText = syncing ? "" : syncStatus === "synced" ? "Synced" : syncStatus === "empty" ? "Connected · No data" : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync error" : "";
+    const [, forceUpdate] = useState(0);
+    useEffect(() => { if (!lastSyncedAt) return; const t = setInterval(() => forceUpdate(n => n+1), 30000); return () => clearInterval(t); }, [lastSyncedAt]);
+    const agoText = lastSyncedAt && !syncing ? _timeAgo(lastSyncedAt) : "";
     return e("div", { style: { position: "sticky", top: 0, zIndex: 50 } },
       e("div", { className: "user-bar" },
         e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
           syncing && e("div", { className: "spinner", style: { width: 12, height: 12, borderWidth: 2 } }),
           statusText && e("span", { style: { fontSize: 10, color: statusDot, display: "flex", alignItems: "center", gap: 3 } },
             e("span", { style: { width: 6, height: 6, borderRadius: "50%", background: statusDot, display: "inline-block" } }), statusText),
+          agoText && e("span", { style: { fontSize: 9, color: "#71717a" } }, agoText),
           !isConnected && e("button", { onClick: onReconnect, style: { background: "none", border: "none", color: "#f97316", fontSize: 12, cursor: "pointer", padding: 0 } }, "Sync"),
         ),
         isConnected && e("button", { onClick: onSignOut, style: { background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer" } }, "Sign out"),
@@ -1854,6 +1871,7 @@
     const [state, dispatch] = useReducer(reducer, null, makeInitialState);
     const [syncing, setSyncing] = useState(false);
     const [syncStatus, setSyncStatus] = useState(""); // "" | "synced" | "offline" | "error"
+    const [lastSyncedAt, setLastSyncedAt] = useState(null); // Date object of last successful sync
     const [loadMsg, setLoadMsg] = useState("Loading...");
     const syncTimeout = useRef(null);
     const prevState = useRef(null);
@@ -1897,7 +1915,7 @@
       setSyncing(true); setSyncStatus("");
       try{
         await sheetsService.saveAll(st);
-        setSyncStatus("synced");
+        setSyncStatus("synced"); setLastSyncedAt(new Date());
       } catch(ex) {
         // If 401/403 (token expired), try silent re-auth and retry once
         if (ex.message && (ex.message.includes("401") || ex.message.includes("403") || ex.message.toLowerCase().includes("invalid")) && typeof google !== "undefined" && google.accounts) {
@@ -1911,7 +1929,7 @@
             });
             sheetsService.accessToken = newToken;
             await sheetsService.saveAll(st);
-            setSyncStatus("synced");
+            setSyncStatus("synced"); setLastSyncedAt(new Date());
           } catch(retryEx) { console.warn("Sync retry failed:", retryEx); setSyncStatus("error"); }
         } else {
           console.warn("Sync:", ex); setSyncStatus("error");
@@ -1963,7 +1981,7 @@
         dispatch({type:"LOAD_FROM_SHEETS",data:remoteData});
         prevState.current={...makeInitialState(),...remoteData};
         setAuthState("ready");
-        setSyncStatus(wCount > 0 || hCount > 0 ? "synced" : "empty");
+        setSyncStatus(wCount > 0 || hCount > 0 ? "synced" : "empty"); setLastSyncedAt(new Date());
         try{localStorage.setItem("workit_session","active")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
     }, [state]);
@@ -2022,7 +2040,7 @@
       state.activeView === "tracking" && state.trackingSession
         ? e(TrackingSession, { state, dispatch })
         : [
-          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, isConnected: authState==="ready", onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect }),
+          e(NavBar, { key: "nav", activeView: state.activeView, dispatch, isConnected: authState==="ready", onSignOut: handleSignOut, syncing, syncStatus, onReconnect: handleReconnect, lastSyncedAt }),
           e("div", { key: "content", style: { paddingBottom: 80 } },
             state.activeView === "dashboard" && e(Dashboard, { state, dispatch }),
             state.activeView === "schedule" && e(ScheduleSetup, { state, dispatch, syncStatus, syncing }),
