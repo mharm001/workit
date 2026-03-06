@@ -314,6 +314,109 @@ function testMultipleHistoryEntries() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// TEST: Cadence advances to rest day after save
+// ═══════════════════════════════════════════════════════════════════
+function testCadenceRestDay() {
+  console.log("\n═══ Cadence Rest Day After Save ═══");
+  let s = makeInitialState();
+
+  // Create workouts
+  s = dispatch(s, { type: "UPSERT_WORKOUT", workout: { name: "Push", exercises: [{ id: "e1", name: "Bench", sets: 3, defaultReps: 8 }] } });
+  const pushId = Object.keys(s.workouts)[0];
+  s = dispatch(s, { type: "UPSERT_WORKOUT", workout: { name: "Pull", exercises: [{ id: "e2", name: "Row", sets: 3, defaultReps: 8 }] } });
+  const pullId = Object.keys(s.workouts).find(k => k !== pushId);
+
+  // Set up cadence: Push, Pull, Rest (null workoutId)
+  s = dispatch(s, { type: "SET_SCHEDULE_TYPE", scheduleType: "cadence" });
+  s = dispatch(s, { type: "SET_CADENCE_SCHEDULE", data: {
+    rotation: [
+      { workoutId: pushId },
+      { workoutId: pullId },
+      { workoutId: null },  // Rest day
+    ],
+    currentIndex: 1, // Currently on Pull
+  }});
+  assert(s.cadenceSchedule.currentIndex === 1, "Starts at index 1 (Pull)");
+
+  // Track and save Pull workout
+  s = dispatch(s, { type: "START_TRACKING", session: {
+    workoutId: pullId, exercises: [{ exerciseId: "e2", name: "Row", sets: [{ reps: 8, weight: 135, rir: 2, warmup: false }] }]
+  }});
+  s = dispatch(s, { type: "SAVE_WORKOUT" });
+
+  // After save, cadence should advance to index 2 (Rest)
+  assert(s.cadenceSchedule.currentIndex === 2, "Advanced to index 2 (Rest day)");
+  assert(s.history.length === 1, "History has 1 entry (Pull workout saved)");
+  assert(s.history[0].workoutName === "Pull", "Saved workout is Pull");
+
+  // The current slot is Rest (workoutId: null)
+  const currentSlot = s.cadenceSchedule.rotation[s.cadenceSchedule.currentIndex];
+  assert(currentSlot.workoutId === null, "Current cadence slot is Rest (null workoutId)");
+
+  // Verify the saved history entry has the workout name for display even when todayW is null
+  assert(s.history[0].workoutName === "Pull", "History entry has workoutName for display");
+
+  // Track another workout (Push) — cadence advances past rest to index 0
+  s = dispatch(s, { type: "SET_CADENCE_SCHEDULE", data: { currentIndex: 0 } });
+  s = dispatch(s, { type: "START_TRACKING", session: {
+    workoutId: pushId, exercises: [{ exerciseId: "e1", name: "Bench", sets: [{ reps: 8, weight: 185, rir: 1, warmup: false }] }]
+  }});
+  s = dispatch(s, { type: "SAVE_WORKOUT" });
+  assert(s.cadenceSchedule.currentIndex === 1, "Advanced from Push (0) to Pull (1)");
+  assert(s.history.length === 2, "History has 2 entries");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TEST: Next workout skips rest days in cadence
+// ═══════════════════════════════════════════════════════════════════
+function testCadenceNextSkipsRest() {
+  console.log("\n═══ Cadence Next Workout Skips Rest ═══");
+  let s = makeInitialState();
+
+  s = dispatch(s, { type: "UPSERT_WORKOUT", workout: { name: "Legs", exercises: [] } });
+  const legsId = Object.keys(s.workouts)[0];
+  s = dispatch(s, { type: "UPSERT_WORKOUT", workout: { name: "Push", exercises: [] } });
+  const pushId = Object.keys(s.workouts).find(k => k !== legsId);
+
+  s = dispatch(s, { type: "SET_SCHEDULE_TYPE", scheduleType: "cadence" });
+  s = dispatch(s, { type: "SET_CADENCE_SCHEDULE", data: {
+    rotation: [
+      { workoutId: legsId },
+      { workoutId: null },  // Rest
+      { workoutId: null },  // Rest
+      { workoutId: pushId },
+    ],
+    currentIndex: 1, // On first rest day
+  }});
+
+  // Simulate finding next workout by scanning from currentIndex
+  const rot = s.cadenceSchedule.rotation;
+  let nextW = null;
+  for (let ci = 0; ci < rot.length; ci++) {
+    const ni = (s.cadenceSchedule.currentIndex + ci) % rot.length;
+    const ns = rot[ni];
+    if (ns && ns.workoutId && s.workouts[ns.workoutId]) {
+      nextW = s.workouts[ns.workoutId].name;
+      break;
+    }
+  }
+  assert(nextW === "Push", "Next workout skips rest days and finds Push");
+
+  // When currentIndex is on a workout
+  s = dispatch(s, { type: "SET_CADENCE_SCHEDULE", data: { currentIndex: 0 } });
+  let nextW2 = null;
+  for (let ci = 0; ci < rot.length; ci++) {
+    const ni = (s.cadenceSchedule.currentIndex + ci) % rot.length;
+    const ns = rot[ni];
+    if (ns && ns.workoutId && s.workouts[ns.workoutId]) {
+      nextW2 = s.workouts[ns.workoutId].name;
+      break;
+    }
+  }
+  assert(nextW2 === "Legs", "When on Legs slot, next is Legs itself");
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // RUN ALL
 // ═══════════════════════════════════════════════════════════════════
 testWorkoutCRUD();
@@ -324,6 +427,8 @@ testWeightLogging();
 testImportAndLoad();
 testCadenceRotation();
 testMultipleHistoryEntries();
+testCadenceRestDay();
+testCadenceNextSkipsRest();
 
 console.log(`\n═══ RESULTS: ${passed} passed, ${failed} failed ═══`);
 if (failed > 0) process.exit(1);
