@@ -73,7 +73,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.29.0";
+  const APP_VERSION = "2.30.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-05";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1906,21 +1906,20 @@
     }, [state, authState, syncToSheets]);
 
     // ── 5. Connect to Sheets (shared by login + reconnect)
-    const connectSheets = useCallback(async (token) => {
+    // fromOffline=true means user was working offline and made changes → local wins
+    // fromOffline=false means fresh login from login screen → remote wins
+    const connectSheets = useCallback(async (token, fromOffline) => {
       sheetsService.accessToken = token;
       try{
         let id=await sheetsService.findSpreadsheet();
         if(!id) id=await sheetsService.createSpreadsheet();
         sheetsService.spreadsheetId=id;
-        // Merge strategy: if reconnecting from offline, local is source of truth (user was actively editing).
-        // If fresh login (no local data), pull from remote.
-        const localData = loadLocal();
-        if (localData && localData.history) {
-          // Local data exists — push local to sheets (handles adds, edits, AND deletes)
-          const pushState = { ...makeInitialState(), ...localData };
-          await sheetsService.saveAll(pushState);
+        if (fromOffline) {
+          // Reconnecting after offline edits — local state is source of truth
+          // Push current React state (already in memory) to sheets
+          await sheetsService.saveAll(state);
         } else {
-          // No local data — pull from remote
+          // Fresh login — pull from remote, it's the source of truth
           const remoteData=await sheetsService.loadAll();
           dispatch({type:"LOAD_FROM_SHEETS",data:remoteData});
           prevState.current={...makeInitialState(),...remoteData};
@@ -1928,7 +1927,7 @@
         setAuthState("ready"); setSyncStatus("synced");
         try{localStorage.setItem("workit_session","active")}catch(e){}
       }catch(ex){console.warn("Sheets connect:",ex); setSyncStatus("error"); setAuthState(loadLocal() ? "offline" : "login");}
-    }, []);
+    }, [state]);
 
     // ── 5a. Auto-reconnect when data changes while offline (save, edit, delete workout, log weight)
     const prevHistoryHash = useRef(null);
@@ -1945,7 +1944,7 @@
         try {
           var client = google.accounts.oauth2.initTokenClient({
             client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
-            callback: async function(resp) { if (!resp.error) await connectSheets(resp.access_token); },
+            callback: async function(resp) { if (!resp.error) await connectSheets(resp.access_token, true); },
           });
           client.requestAccessToken();
         } catch(ex) { /* stay offline, data is safe in localStorage */ }
@@ -1955,7 +1954,7 @@
     // ── 6. Manual login (first time or re-auth)
     const handleLogin = useCallback(async (token) => {
       setAuthState("loading"); setLoadMsg("Connecting...");
-      await connectSheets(token);
+      await connectSheets(token, false);
     }, [connectSheets]);
 
     // ── 7. Sign out — only way to get back to login screen
@@ -1972,7 +1971,7 @@
           client_id: GOOGLE_CLIENT_ID, scope: SCOPES,
           callback: async (resp) => {
             if (resp.error) { setSyncStatus("error"); return; }
-            await connectSheets(resp.access_token);
+            await connectSheets(resp.access_token, true);
           },
         });
         client.requestAccessToken();
