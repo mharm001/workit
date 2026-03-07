@@ -11,7 +11,7 @@
   <meta name="theme-color" content="#0c0c0c">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230c0c0c'/><rect x='3' y='12' width='4' height='17' rx='1.5' fill='%23f97316' opacity='.8'/><rect x='9' y='8' width='4' height='21' rx='1.5' fill='%23f97316'/><rect x='15' y='4' width='4' height='25' rx='1.5' fill='%23f97316'/><rect x='21' y='14' width='4' height='15' rx='1.5' fill='%23f97316' opacity='.6'/><rect x='27' y='10' width='4' height='19' rx='1.5' fill='%23f97316' opacity='.9'/></svg>">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com; img-src 'self' data:; base-uri 'self';">
   <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" integrity="sha384-HtMZLkYo+pR5/u7zCzXxMJP6QoNnQJt1qkHM0EaOPvGDIzaVZbmYr/TlvUZ/sKAg">
   <script crossorigin="anonymous" src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" integrity="sha384-tMH8h3BGESGckSAVGZ82T9n90ztNXxvdwvdM6UoR56cYcf+0iGXBliJ29D+wZ/x8"></script>
   <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh"></script>
@@ -97,7 +97,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.52.0";
+  const APP_VERSION = "2.53.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -2124,8 +2124,8 @@
       reader.onload = async function(e) {
         try {
           const data = JSON.parse(e.target.result);
-          if (data.workouts && data.history !== undefined) { dispatch({type:"IMPORT_STATE",state:data}); try{await sheetsService.saveAll(data)}catch(ex){} }
-          else setImportError("This file doesn't look like a valid Workit backup. Expected fields 'workouts' and 'history'.");
+          if (data.workouts && typeof data.workouts === "object" && !Array.isArray(data.workouts) && Array.isArray(data.history)) { dispatch({type:"IMPORT_STATE",state:data}); try{await sheetsService.saveAll(data)}catch(ex){} }
+          else setImportError("This file doesn't look like a valid Workit backup. Expected 'workouts' (object) and 'history' (array).");
         } catch(ex) { setImportError("Could not parse the file as JSON. Please choose a valid Workit backup file."); }
       };
       reader.readAsText(file);
@@ -2460,7 +2460,9 @@
 
     // ── 7. Sign out — only way to get back to login screen
     const handleSignOut = useCallback(() => {
+      var token=sheetsService.accessToken;
       sheetsService.accessToken=null;sheetsService.spreadsheetId=null;
+      if(token){try{google.accounts.oauth2.revoke(token,()=>{})}catch(e){}}
       try{localStorage.removeItem("workit_session")}catch(e){}
       setAuthState("login"); setSyncStatus("");
     }, []);
