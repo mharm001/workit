@@ -609,7 +609,7 @@
         const clean = {}; allowed.forEach(k => { if (action.state[k] !== undefined) clean[k] = action.state[k]; });
         return { ...state, ...clean, activeView: "dashboard", trackingSession: null };
       }
-      default: return state;
+      default: console.warn("Unknown action:", action.type); return state;
     }
   }
 
@@ -1347,8 +1347,8 @@
           ),
         ),
         e("div", { style: { display: "flex", gap: 8 } },
-          e("input", { name: "bodyWeight", type: "text", inputMode: "decimal", placeholder: (() => { const last = [...state.weightLog].reverse().find(w => w.weight); return last ? String(last.weight) : "Weight (" + state.weightUnit + ")"; })(), value: weightInput, onInput: ev => { const v = ev.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) setWeightInput(v); }, className: "input", style: { flex: 3 } }),
-          e("input", { name: "bodyFat", type: "text", inputMode: "decimal", placeholder: (() => { const last = [...state.weightLog].reverse().find(w => w.bodyFat != null); return last ? String(last.bodyFat) + "%" : "BF %"; })(), value: bfInput, onInput: ev => { const v = ev.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) setBfInput(v); }, className: "input", style: { flex: 2 } }),
+          e("input", { name: "bodyWeight", type: "text", inputMode: "decimal", placeholder: (() => { const last = [...state.weightLog].reverse().find(w => w.weight); return last ? String(last.weight) : "Weight (" + state.weightUnit + ")"; })(), value: weightInput, onChange: ev => { const v = ev.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) setWeightInput(v); }, className: "input", style: { flex: 3 } }),
+          e("input", { name: "bodyFat", type: "text", inputMode: "decimal", placeholder: (() => { const last = [...state.weightLog].reverse().find(w => w.bodyFat != null); return last ? String(last.bodyFat) + "%" : "BF %"; })(), value: bfInput, onChange: ev => { const v = ev.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) setBfInput(v); }, className: "input", style: { flex: 2 } }),
           e("button", { className: "btn btn-accent", style: { whiteSpace: "nowrap" }, onClick: logWeight }, "Update"),
         ),
         state.weightLog.some(w => w.date === todayStr) && e("div", { style: { fontSize: 12, color: "#4ade80", marginTop: 8 } },
@@ -1413,7 +1413,7 @@
             ),
             state.cadenceSchedule.restMode === "auto" && e("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 12 } },
               e("span", { style: { fontSize: 13, color: "#d4d4d8" } }, "Rest every"),
-              e("input", { name: "restEvery", type: "number", min: 1, max: 10, value: state.cadenceSchedule.autoRestEvery, onInput: ev => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{autoRestEvery:parseInt(ev.target.value)||3}}); }, className: "input input-sm" }),
+              e("input", { name: "restEvery", type: "number", min: 1, max: 10, value: state.cadenceSchedule.autoRestEvery, onChange: ev => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{autoRestEvery:parseInt(ev.target.value)||3}}); }, className: "input input-sm" }),
               e("span", { style: { fontSize: 13, color: "#d4d4d8" } }, "workout days"),
             ),
           ),
@@ -1539,7 +1539,7 @@
           e("button", { style: { background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#ef4444", cursor: "pointer", fontSize: 13, padding: "6px 14px", fontWeight: 600 }, onClick: () => setEditing(null) }, "Cancel"),
         ),
         e("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
-          e("input", { name: "workoutName", type: "text", placeholder: "Workout name", value: name, onInput: ev => { setName(ev.target.value); if(ev.target.value.trim())setNameError(false); }, className: "input", style: { padding: 12, fontSize: 16, borderColor: nameError ? "#ef4444" : "" } }),
+          e("input", { name: "workoutName", type: "text", placeholder: "Workout name", value: name, onChange: ev => { setName(ev.target.value); if(ev.target.value.trim())setNameError(false); }, className: "input", style: { padding: 12, fontSize: 16, borderColor: nameError ? "#ef4444" : "" } }),
           nameError && e("div", { style: { fontSize: 12, color: "#ef4444", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 6, padding: "6px 10px", marginTop: 4 } }, "Give your workout a name"),
         ),
         // Target muscle groups
@@ -1558,7 +1558,7 @@
           targetMuscles.length > 0 && e("div", { style: { marginBottom: 8 } },
             e("button", { style: { background: "none", border: "none", color: "#71717a", fontSize: 11, cursor: "pointer", textDecoration: "underline" }, onClick: () => setShowAllCats(!showAllCats) }, showAllCats ? "Show only target muscles" : "Show all muscles")
           ),
-          e("input", { type: "text", placeholder: "Search exercises...", value: libSearch, onInput: ev => setLibSearch(ev.target.value), className: "input", style: { marginBottom: 8, fontSize: 13 } }),
+          e("input", { type: "text", placeholder: "Search exercises...", value: libSearch, onChange: ev => setLibSearch(ev.target.value), className: "input", style: { marginBottom: 8, fontSize: 13 } }),
           e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
             (EXERCISE_LIBRARY[activeLibCat]||[]).filter(function(ex) { return !libSearch || ex.name.toLowerCase().includes(libSearch.toLowerCase()); }).map(ex => e("button", { key: ex.name, className: "lib-exercise-btn", onClick: () => addEx(ex) },
               ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"×"+ex.defaultReps),
@@ -1596,10 +1596,10 @@
               ),
             ),
             e("div", { style: { flex: 1, display: "flex", flexDirection: "column", gap: 8 } },
-              e("input", { name: "exerciseName", type: "text", value: ex.name, placeholder: "Exercise name", onFocus: function(ev) { ev.target.select(); }, onInput: ev => updEx(ex.id,"name",ev.target.value), className: "input", style: { fontSize: 13 }, autoFocus: !ex.name }),
+              e("input", { name: "exerciseName", type: "text", value: ex.name, placeholder: "Exercise name", onFocus: function(ev) { ev.target.select(); }, onChange: ev => updEx(ex.id,"name",ev.target.value), className: "input", style: { fontSize: 13 }, autoFocus: !ex.name }),
               e("div", { style: { display: "flex", gap: 12 } },
-                e("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, e("span", { style:{fontSize:11,color:"#a1a1aa"} }, "Sets:"), e("input", { name:"exerciseSets", type:"number",min:1,value:ex.sets,onInput:ev=>updEx(ex.id,"sets",parseInt(ev.target.value)||1),className:"input input-sm" })),
-                e("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, e("span", { style:{fontSize:11,color:"#a1a1aa"} }, "Reps:"), e("input", { name:"exerciseReps", type:"number",min:1,value:ex.defaultReps,onInput:ev=>updEx(ex.id,"defaultReps",parseInt(ev.target.value)||1),className:"input input-sm" })),
+                e("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, e("span", { style:{fontSize:11,color:"#a1a1aa"} }, "Sets:"), e("input", { name:"exerciseSets", type:"number",min:1,value:ex.sets,onChange:ev=>updEx(ex.id,"sets",parseInt(ev.target.value)||1),className:"input input-sm" })),
+                e("div", { style: { display: "flex", alignItems: "center", gap: 4 } }, e("span", { style:{fontSize:11,color:"#a1a1aa"} }, "Reps:"), e("input", { name:"exerciseReps", type:"number",min:1,value:ex.defaultReps,onChange:ev=>updEx(ex.id,"defaultReps",parseInt(ev.target.value)||1),className:"input input-sm" })),
               ),
               e("div", null,
                 e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 4 } }, "Alternatives" + (ex.alternatives.length > 0 ? " (" + ex.alternatives.length + ")" : "")),
@@ -1619,7 +1619,7 @@
                   if (q) { sameCat = sameCat.filter(function(l) { return l.name.toLowerCase().includes(q); }); otherCats = otherCats.filter(function(l) { return l.name.toLowerCase().includes(q); }); }
                   var sameLabel = relevantCats.map(function(c) { return c.charAt(0).toUpperCase()+c.slice(1); }).join(" & ");
                   return e("div", { style: { marginTop: 6, border: "1px solid #3f3f46", borderRadius: 8, overflow: "hidden" } },
-                    e("input", { type: "text", placeholder: "Search exercises...", value: altSearch, onInput: function(ev) { setAltSearch(ev.target.value); }, className: "input", style: { fontSize: 12, borderRadius: 0, border: "none", borderBottom: "1px solid #3f3f46" }, autoFocus: true }),
+                    e("input", { type: "text", placeholder: "Search exercises...", value: altSearch, onChange: function(ev) { setAltSearch(ev.target.value); }, className: "input", style: { fontSize: 12, borderRadius: 0, border: "none", borderBottom: "1px solid #3f3f46" }, autoFocus: true }),
                     e("div", { style: { maxHeight: 180, overflowY: "auto" } },
                       sameCat.length > 0 && e("div", { style: { padding: "6px 10px", fontSize: 10, color: "#71717a", textTransform: "uppercase", letterSpacing: 0.5, background: "#1c1c1e" } }, sameLabel || "Similar"),
                       sameCat.map(function(l) { return e("button", { key: "s-"+l.cat+"-"+l.name, className: "lib-exercise-btn", style: { fontSize: 12 }, onClick: function() { addAlt(ex.id, l.name); } }, l.name); }),
@@ -1927,7 +1927,7 @@
               // Category catalog
               cat && e("div", { style: { paddingTop: 12 } },
                 e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "#71717a", marginBottom: 8 } }, "More " + cat.charAt(0).toUpperCase() + cat.slice(1) + " Exercises"),
-                e("input", { type: "text", placeholder: "Search " + cat + "...", value: swapSearch, onInput: function(ev) { setSwapSearch(ev.target.value); }, className: "input", style: { marginBottom: 8, fontSize: 14 } }),
+                e("input", { type: "text", placeholder: "Search " + cat + "...", value: swapSearch, onChange: function(ev) { setSwapSearch(ev.target.value); }, className: "input", style: { marginBottom: 8, fontSize: 14 } }),
                 catalogList.length > 0 ? catalogList.slice(0, 20).map(function(name) {
                   return e("button", { key: name, style: { display: "block", width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#a1a1aa", fontSize: 13, cursor: "pointer" }, onClick: function() { swap(showSwap, name); } }, name);
                 }) : swapSearch && e("div", { style: { padding: "12px 0", textAlign: "center", color: "#52525b", fontSize: 13 } }, "No matches for \u201c" + swapSearch + "\u201d"),
