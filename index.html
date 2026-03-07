@@ -1684,6 +1684,7 @@
   function TrackingSession({ state, dispatch }) {
     const s = state.trackingSession; if (!s) return null;
     const w = state.workouts[s.workoutId];
+    if (!w) { dispatch({type:"CANCEL_TRACKING"}); return null; }
     const [showSwap, setShowSwap] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [collapsed, setCollapsed] = useState({});
@@ -2403,7 +2404,7 @@
       prevState.current=state;
       if(syncTimeout.current)clearTimeout(syncTimeout.current);
       const delay = state.trackingSession ? 2000 : 500;
-      syncTimeout.current=setTimeout(()=>syncToSheets(state),delay);
+      syncTimeout.current=setTimeout(()=>syncToSheets(stateRef.current),delay);
     }, [state, authState, syncToSheets]);
 
     // ── 5. Connect to Sheets (shared by login + reconnect)
