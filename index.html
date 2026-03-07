@@ -82,7 +82,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.64.0";
+  const APP_VERSION = "2.65.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1161,23 +1161,20 @@
         totalDone += Math.min(done, perWeek);
       }
       var trend = hasData && perWeek > 0 && totalExp > 0 ? Math.round(totalDone / totalExp * 100) : null;
-      // Volume trend (this week vs last week)
-      var now = new Date(); var thisWeekStart = new Date(now); thisWeekStart.setDate(thisWeekStart.getDate() - 6);
-      var lastWeekEnd = new Date(thisWeekStart); lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+      // Volume trend (calendar week vs previous calendar week)
+      var lastWeekEnd = new Date(weekStart); lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
       var lastWeekStart = new Date(lastWeekEnd); lastWeekStart.setDate(lastWeekStart.getDate() - 6);
       var volCalc = function(h) { return h.exercises.reduce(function(a, ex) { return a + ex.sets.filter(function(s){return !s.warmup&&(s.rir===undefined||s.rir!==3)}).reduce(function(b, s){return b + s.reps * s.weight}, 0); }, 0); };
-      var thisVol = state.history.filter(function(h){return h.date >= toDateStr(thisWeekStart) && h.date <= toDateStr(now)}).reduce(function(a,h){return a+volCalc(h)},0);
+      var thisVol = state.history.filter(function(h){return h.date >= weekStartStr && h.date <= todayStr}).reduce(function(a,h){return a+volCalc(h)},0);
       var lastVol = state.history.filter(function(h){return h.date >= toDateStr(lastWeekStart) && h.date <= toDateStr(lastWeekEnd)}).reduce(function(a,h){return a+volCalc(h)},0);
       var volDelta = lastVol > 0 ? Math.round((thisVol - lastVol) / lastVol * 100) : 0;
-      // Streak (consecutive completed calendar weeks hitting perWeek target)
-      var streak = 0;
-      for (var sw = 1; sw <= 52; sw++) {
-        var se = new Date(weekStart); se.setDate(se.getDate() - (sw - 1) * 7 - 1);
-        var ss = new Date(se); ss.setDate(ss.getDate() - 6);
-        var cnt = state.history.filter(function(h){return h.date >= toDateStr(ss) && h.date <= toDateStr(se)}).length;
-        if (perWeek > 0 && cnt >= perWeek) streak++; else break;
-      }
-      return { thisWeekDone: thisWeekDone, trend: trend, thisVol: thisVol, volDelta: volDelta, streak: streak, perWeek: perWeek };
+      // Average intensity this week (RIR of work sets, excluding warmups)
+      var weekSets = [], avgIntensity = null;
+      state.history.filter(function(h) { return h.date >= weekStartStr && h.date <= todayStr; }).forEach(function(h) {
+        h.exercises.forEach(function(ex) { ex.sets.forEach(function(s) { if (!s.warmup && s.rir !== undefined && s.rir !== 3) weekSets.push(s.rir); }); });
+      });
+      if (weekSets.length > 0) avgIntensity = Math.round(weekSets.reduce(function(a,b){return a+b},0) / weekSets.length * 10) / 10;
+      return { thisWeekDone: thisWeekDone, trend: trend, thisVol: thisVol, volDelta: volDelta, avgIntensity: avgIntensity, perWeek: perWeek };
     }, [state.history,state.weeklySchedule,state.cadenceSchedule,state.scheduleType]);
 
     // Memoized reversed history — avoids creating a new array on every render pass
@@ -1210,9 +1207,11 @@
     };
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
-      // Date header
-      e("div", { className: "text-muted", style: { fontSize: 13 } }, new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})),
-      // Stats
+      // Week header
+      e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
+        e("div", { className: "label", style: { margin: 0 } }, "This Week"),
+        e("div", { className: "text-muted", style: { fontSize: 11 } }, new Date().toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})),
+      ),
       e("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
         e("div", { className: "stat-box" }, (function() {
           var done = Math.min(dashStats.thisWeekDone, dashStats.perWeek), goal = dashStats.perWeek || 1;
@@ -1227,18 +1226,28 @@
               ),
               e("div", { style: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#e4e4e7" } }, done + "/" + goal),
             ),
-            e("div", { key: "label", className: "stat-label" }, "this week"),
-            dashStats.trend !== null && e("div", { key: "trend", style: { fontSize: 9, color: "#71717a", marginTop: 2 } }, dashStats.trend + "% \u00B7 4 wks"),
+            e("div", { key: "label", className: "stat-label" }, "sessions"),
+            dashStats.trend !== null && e("div", { key: "trend", style: { fontSize: 9, color: "#71717a", marginTop: 2 } }, dashStats.trend + "% \u00B7 4 wk avg"),
           ];
         })()),
         e("div", { className: "stat-box" },
-          e("div", { className: "stat-num" }, dashStats.thisVol >= 1000 ? (dashStats.thisVol/1000).toFixed(1) + "k" : dashStats.thisVol || "—"),
-          e("div", { className: "stat-label" }, dashStats.volDelta !== 0 ? (dashStats.volDelta > 0 ? "\u2191" : "\u2193") + Math.abs(dashStats.volDelta) + "% vs last wk" : "Volume"),
+          e("div", { style: { height: 56, display: "flex", alignItems: "center", justifyContent: "center" } },
+            e("div", { className: "stat-num" }, dashStats.thisVol >= 1000 ? (dashStats.thisVol/1000).toFixed(1) + "k" : dashStats.thisVol > 0 ? dashStats.thisVol : "\u2014"),
+          ),
+          e("div", { className: "stat-label" }, dashStats.thisVol > 0 && dashStats.volDelta !== 0 ? (dashStats.volDelta > 0 ? "\u2191" : "\u2193") + Math.abs(dashStats.volDelta) + "% avg vol" : "Volume"),
         ),
-        e("div", { className: "stat-box" },
-          e("div", { className: "stat-num" }, dashStats.streak > 0 ? dashStats.streak : "—"),
-          e("div", { className: "stat-label" }, dashStats.streak === 1 ? "week streak" : "week streak"),
-        ),
+        e("div", { className: "stat-box" }, (function() {
+          var ai = dashStats.avgIntensity;
+          if (ai === null) return [e("div", { key: "h", style: { height: 56, display: "flex", alignItems: "center", justifyContent: "center" } }, e("div", { className: "stat-num" }, "\u2014")), e("div", { key: "l", className: "stat-label" }, "Intensity")];
+          var label = ai <= 0.5 ? "MAX" : ai <= 1.5 ? "HARD" : "LITE";
+          var color = ai <= 0.5 ? "#ef4444" : ai <= 1.5 ? "#fb923c" : "#facc15";
+          return [
+            e("div", { key: "h", style: { height: 56, display: "flex", alignItems: "center", justifyContent: "center" } },
+              e("div", { className: "stat-num", style: { color: color } }, label),
+            ),
+            e("div", { key: "l", className: "stat-label" }, "Avg RIR " + ai.toFixed(1)),
+          ];
+        })()),
       ),
       // Weekly schedule tile
       state.scheduleType === "weekly" && e("div", { className: "card", style: { padding: "10px 14px" } },
@@ -1355,10 +1364,10 @@
           e("div", { className: "label", style: { margin: 0 } }, "Recent Workouts"),
           reversedHistory.length > 1 && e("button", { style: { background: "none", border: "none", padding: "4px 8px", cursor: "pointer", color: "#71717a", fontSize: 12 }, onClick: () => setShowPast(!showPast) }, showPast ? "\u25B2" : "\u25BC"),
         ),
-        // Always show last workout — with Edit button if it's today's
-        reversedHistory.length > 0 && renderPastEntry(reversedHistory[0], undefined, reversedHistory[0].date === todayStr),
+        // Always show last workout — with Edit button
+        reversedHistory.length > 0 && renderPastEntry(reversedHistory[0], undefined, true),
         // Expanded: show older workouts
-        showPast && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i)),
+        showPast && reversedHistory.slice(1, 8).map((entry, i) => renderPastEntry(entry, i, true)),
       ),
       // Body metrics
       e("div", { className: "card" },
@@ -1542,13 +1551,14 @@
     const startNew = () => { setEditing("new"); setName(""); setNameError(false); setExError(false); setTargetMuscles([]); setExercises([]); setLibCat(""); setShowAllCats(false); };
     const startEdit = w => { setEditing(w.id); setName(w.name); setNameError(false); setExError(false); setTargetMuscles(w.targetMuscles||[]); setExercises(w.exercises.map(x=>({...x}))); setLibCat(""); setShowAllCats(false); };
     const toggleMuscle = cat => { setTargetMuscles(prev => prev.includes(cat) ? prev.filter(c=>c!==cat) : [...prev,cat]); setLibCat(""); setShowAllCats(false); };
-    const addEx = ex => { setExercises([...exercises, { id: uid(), name: ex.name, sets: ex.defaultSets, defaultReps: ex.defaultReps, alternatives: [] }]); setExError(false); };
+    const [justAdded, setJustAdded] = useState(null);
+    const addEx = ex => { setExercises(prev => [...prev, { id: uid(), name: ex.name, sets: ex.defaultSets, defaultReps: ex.defaultReps, alternatives: [] }]); setExError(false); setJustAdded(ex.name); setTimeout(() => setJustAdded(null), 1200); };
     const addCustom = () => setExercises([...exercises, { id: uid(), name: "", sets: 3, defaultReps: 10, alternatives: [] }]);
     const updEx = (id, f, v) => setExercises(exercises.map(x => x.id===id ? {...x,[f]:v} : x));
     const remEx = id => setExercises(exercises.filter(x => x.id!==id));
     const addAlt = (id,n) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:[...x.alternatives,n]} : x));
     const remAlt = (id,ai) => setExercises(exercises.map(x => x.id===id ? {...x,alternatives:x.alternatives.filter((_,i)=>i!==ai)} : x));
-    const save = () => { if(!name.trim()){ setNameError(true); return; } var validEx = exercises.filter(x => x.name.trim()); if(validEx.length === 0){ setExError(true); return; } dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),targetMuscles,exercises:validEx}}); setEditing(null); };
+    const save = () => { if(!name.trim()){ setNameError(true); window.scrollTo({top:0,behavior:"smooth"}); return; } var validEx = exercises.filter(x => x.name.trim()); if(validEx.length === 0){ setExError(true); return; } dispatch({type:"UPSERT_WORKOUT",workout:{id:editing==="new"?undefined:editing,name:name.trim(),targetMuscles,exercises:validEx}}); setEditing(null); };
     const del = id => { dispatch({type:"DELETE_WORKOUT",id}); if(editing===id)setEditing(null); };
     // Library categories: only show target muscles unless "Show all" is toggled
     const libCategories = targetMuscles.length > 0 && !showAllCats ? targetMuscles : ALL_MUSCLE_GROUPS;
@@ -1572,7 +1582,7 @@
           ),
           targetMuscles.length === 0 && e("p", { style: { fontSize: 11, color: "#52525b", marginTop: 6 } }, "Select muscles to filter the exercise library"),
         ),
-        e("button", { className: "btn btn-ghost", style: { width: "100%" }, onClick: () => setShowLib(!showLib) }, "+ Add from Library"),
+        e("button", { className: "btn btn-ghost", style: { width: "100%" }, onClick: () => setShowLib(!showLib) }, showLib ? exercises.length > 0 ? "Done (" + exercises.length + " exercises)" : "Close Library" : "+ Add from Library"),
         showLib && e("div", { className: "card" },
           e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
             libCategories.map(cat => e("button", { key: cat, style: { padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 11, cursor: "pointer", textTransform: "capitalize", background: activeLibCat===cat?"#f97316": targetMuscles.includes(cat)?"#52341a":"#3f3f46", color: activeLibCat===cat?"#fff": targetMuscles.includes(cat)?"#f97316":"#a1a1aa", fontWeight: targetMuscles.includes(cat)?600:400 }, onClick: () => { setLibCat(cat); setLibSearch(""); } }, cat))
@@ -1582,9 +1592,13 @@
           ),
           e("input", { type: "text", placeholder: "Search exercises...", value: libSearch, onChange: ev => setLibSearch(ev.target.value), className: "input", style: { marginBottom: 8, fontSize: 13 } }),
           e("div", { style: { maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 } },
-            (EXERCISE_LIBRARY[activeLibCat]||[]).filter(function(ex) { return !libSearch || ex.name.toLowerCase().includes(libSearch.toLowerCase()); }).map(ex => e("button", { key: ex.name, className: "lib-exercise-btn", onClick: () => addEx(ex) },
-              ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"×"+ex.defaultReps),
-            ))
+            (EXERCISE_LIBRARY[activeLibCat]||[]).filter(function(ex) { return !libSearch || ex.name.toLowerCase().includes(libSearch.toLowerCase()); }).map(function(ex) {
+              var added = exercises.some(function(e) { return e.name === ex.name; });
+              var fresh = justAdded === ex.name;
+              return e("button", { key: ex.name, className: "lib-exercise-btn", style: added ? { color: "#4ade80" } : undefined, onClick: () => addEx(ex) },
+                added ? "\u2713 " : "", ex.name, " ", e("span", { style: { color: "#71717a" } }, ex.defaultSets+"\u00D7"+ex.defaultReps),
+              );
+            })
           ),
         ),
         !showLib && e("button", { className: "btn btn-ghost", style: { width: "100%", marginTop: 8 }, onClick: () => { setShowLib(false); addCustom(); } }, "+ Add Custom Exercise"),
