@@ -97,7 +97,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.53.0";
+  const APP_VERSION = "2.54.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1932,6 +1932,7 @@
   function Analytics({ state }) {
     const [selEx, setSelEx] = useState("");
     const [selW, setSelW] = useState("");
+    const [trendTab, setTrendTab] = useState("intensity");
     const allEx = useMemo(()=>{const n=new Set();state.history.forEach(h=>h.exercises.forEach(x=>n.add(x.name)));return[...n].sort();},[state.history]);
     const allWN = useMemo(()=>{const n=new Set();state.history.forEach(h=>n.add(h.workoutName));return[...n].sort();},[state.history]);
 
@@ -1992,54 +1993,52 @@
         e("div", { className: "label" }, "Body Composition"),
         e(BodyCompChart, { weightData: weightData, bfData: bfData, weightUnit: state.weightUnit, width: 340, height: 170 }),
       ),
-      // Volume
+      // Workout Trends (Intensity / Volume)
       e("div", { className: "card" },
         e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
-          e("div", { className: "label", style: { margin: 0 } }, "Volume Trend"),
+          e("div", { style: { display: "flex", background: "#27272a", borderRadius: 6, padding: 2 } },
+            ["intensity","volume"].map(t => e("button", { key: t, style: { padding: "4px 12px", borderRadius: 4, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer", background: trendTab===t?"#f97316":"transparent", color: trendTab===t?"#fff":"#71717a", textTransform: "capitalize" }, onClick: () => setTrendTab(t) }, t))
+          ),
           e("select", { name: "filterWorkout", value: selW, onChange: ev => setSelW(ev.target.value), style: { fontSize: 12 } },
             e("option", { value: "" }, "All Workouts"),
             allWN.map(n => e("option", { key: n, value: n }, n)),
           ),
         ),
-        e(MiniBarChart, { data: volTrend, dataKey: "volume", color: "#f97316", width: 340, height: 160 }),
-      ),
-      // Intensity trend
-      intensityTrend.length >= 2 && e("div", { className: "card" },
-        e("div", { className: "label", style: { marginBottom: 8 } }, "Intensity Trend"),
-        (function(){
-          var d=intensityTrend,w=340,h=140,pad=40;
+        // Intensity chart
+        trendTab === "intensity" && (intensityTrend.length >= 2 ? (function(){
+          var d=intensityTrend,w=340,h=150,pad=40;
           var pts=d.map(function(p,i){
             var x=pad+(i/(d.length-1))*(w-pad*2);
-            var y=pad+((2.5-p.avgRir)/2.5)*(h-pad*2); // 0(MAX)=top, 2.5(LITE)=bottom — inverted so higher effort = higher on chart
+            var y=pad+((2.5-p.avgRir)/2.5)*(h-pad*2);
             var c=p.avgRir<=0.5?"#ef4444":p.avgRir<=1.5?"#fb923c":"#facc15";
             return{x:x,y:y,c:c,date:p.date,v:p.avgRir};
           });
           var pathD=pts.map(function(p,i){return(i===0?"M":"L")+p.x+","+p.y}).join(" ");
-          return e("div",{style:{overflowX:"auto"}},
-            e("svg",{width:w,height:h,viewBox:"0 0 "+w+" "+h,style:{display:"block",margin:"0 auto"}},
-              // Y labels: MAX at top, LITE at bottom
-              [["MAX",0],["HARD",1],["LITE",2]].map(function(pair){
-                var yy=pad+((2.5-pair[1])/2.5)*(h-pad*2);
-                var col=pair[1]===0?"#ef4444":pair[1]===1?"#fb923c":"#facc15";
-                return e("g",{key:pair[0]},
-                  e("line",{x1:pad,y1:yy,x2:w-pad,y2:yy,stroke:"#3f3f46",strokeDasharray:"3,3"}),
-                  e("text",{x:pad-6,y:yy+4,textAnchor:"end",fill:col,fontSize:10,fontWeight:600},pair[0]),
-                );
-              }),
-              // X labels
-              d.length<=12?pts.map(function(p,i){return e("text",{key:"x"+i,x:p.x,y:h-pad+14,textAnchor:"middle",fill:"#71717a",fontSize:8},p.date)})
-              :[0,Math.floor(d.length/2),d.length-1].map(function(i){return e("text",{key:"x"+i,x:pts[i].x,y:h-pad+14,textAnchor:"middle",fill:"#71717a",fontSize:8},pts[i].date)}),
-              // Line
-              e("path",{d:pathD,fill:"none",stroke:"#a1a1aa",strokeWidth:1.5}),
-              // Dots colored by zone
-              pts.map(function(p,i){return e("circle",{key:i,cx:p.x,cy:p.y,r:4,fill:p.c})}),
+          return e("div",null,
+            e("div",{style:{overflowX:"auto"}},
+              e("svg",{width:w,height:h,viewBox:"0 0 "+w+" "+h,style:{display:"block",margin:"0 auto"}},
+                [["MAX",0],["HARD",1],["LITE",2]].map(function(pair){
+                  var yy=pad+((2.5-pair[1])/2.5)*(h-pad*2);
+                  var col=pair[1]===0?"#ef4444":pair[1]===1?"#fb923c":"#facc15";
+                  return e("g",{key:pair[0]},
+                    e("line",{x1:pad,y1:yy,x2:w-pad,y2:yy,stroke:"#3f3f46",strokeDasharray:"3,3"}),
+                    e("text",{x:pad-6,y:yy+4,textAnchor:"end",fill:col,fontSize:10,fontWeight:600},pair[0]),
+                  );
+                }),
+                d.length<=12?pts.map(function(p,i){return e("text",{key:"x"+i,x:p.x,y:h-pad+14,textAnchor:"middle",fill:"#71717a",fontSize:8},p.date)})
+                :[0,Math.floor(d.length/2),d.length-1].map(function(i){return e("text",{key:"x"+i,x:pts[i].x,y:h-pad+14,textAnchor:"middle",fill:"#71717a",fontSize:8},pts[i].date)}),
+                e("path",{d:pathD,fill:"none",stroke:"#a1a1aa",strokeWidth:1.5}),
+                pts.map(function(p,i){return e("circle",{key:i,cx:p.x,cy:p.y,r:4,fill:p.c})}),
+              ),
             ),
             e("div",{style:{display:"flex",justifyContent:"center",gap:12,marginTop:6}},
               INTENSITY_OPTIONS.filter(function(o){return o.value!==3}).map(function(o){return e("span",{key:o.value,style:{fontSize:10,color:"#71717a",display:"flex",alignItems:"center",gap:3}},
                 e("span",{style:{width:8,height:8,borderRadius:"50%",background:o.color,display:"inline-block"}}),o.short)}),
             ),
           );
-        })(),
+        })() : e("p", { style: { color: "#52525b", fontSize: 13, textAlign: "center", padding: "24px 0" } }, "Track at least 2 workouts to see intensity trends")),
+        // Volume chart
+        trendTab === "volume" && e(MiniBarChart, { data: volTrend, dataKey: "volume", color: "#f97316", width: 340, height: 160 }),
       ),
       // Exercise progress (only show when there's enough data)
       allEx.length > 0 && state.history.length >= 2 && e("div", { className: "card" },
