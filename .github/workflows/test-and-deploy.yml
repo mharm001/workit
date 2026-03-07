@@ -42,7 +42,8 @@ jobs:
           mkdir _site
           VERSION=$(grep -oP "APP_VERSION = \"\K[^\"]+" index.html)
           sed -i "s/const VERSION = '.*'/const VERSION = '$VERSION'/" sw.js
-          cp index.html manifest.json sw.js icon.svg _site/
+          npx --yes html-minifier-terser --collapse-whitespace --remove-comments --minify-css true --minify-js true index.html -o _site/index.html
+          cp manifest.json sw.js icon.svg _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

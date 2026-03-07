@@ -30,14 +30,9 @@ assert(
   "React-DOM 18.2.0 has SRI integrity hash"
 );
 
-assert(
-  html.includes('integrity="sha384-HtMZLkYo+pR5/u7zCzXxMJP6QoNnQJt1qkHM0EaOPvGDIzaVZbmYr/TlvUZ/sKAg"'),
-  "Tailwind CSS 2.2.19 has SRI integrity hash"
-);
-
 // Verify crossorigin="anonymous" is set on all integrity-bearing tags
 const integrityTags = html.match(/<(script|link)[^>]*integrity="[^"]+"/g) || [];
-assert(integrityTags.length >= 3, "At least 3 tags have integrity attributes (found " + integrityTags.length + ")");
+assert(integrityTags.length >= 2, "At least 2 tags have integrity attributes (found " + integrityTags.length + ")");
 
 for (const tag of integrityTags) {
   assert(tag.includes('crossorigin="anonymous"'), "Tag with integrity also has crossorigin=\"anonymous\": " + tag.slice(0, 80) + "...");
@@ -62,9 +57,13 @@ if (cspMatch) {
   assert(csp.includes("https://unpkg.com"), "CSP script-src allows unpkg.com for React");
   assert(csp.includes("https://accounts.google.com"), "CSP script-src allows accounts.google.com for OAuth");
 
-  // style-src should allow jsdelivr for Tailwind
+  // style-src should allow inline styles
   assert(csp.includes("style-src"), "CSP has style-src directive");
-  assert(csp.includes("https://cdn.jsdelivr.net"), "CSP style-src allows cdn.jsdelivr.net for Tailwind");
+
+  // CSP hardening directives
+  assert(csp.includes("object-src 'none'"), "CSP has object-src 'none'");
+  assert(csp.includes("form-action 'self'"), "CSP has form-action 'self'");
+  assert(csp.includes("worker-src 'self'"), "CSP has worker-src 'self'");
 
   // connect-src should allow Sheets API and Drive API
   assert(csp.includes("connect-src"), "CSP has connect-src directive");
@@ -91,9 +90,7 @@ assert(!!reactScript && reactScript[0].includes("integrity="), "React script tag
 const reactDomScript = html.match(/<script[^>]*src="https:\/\/unpkg\.com\/react-dom@18\.2\.0\/umd\/react-dom\.production\.min\.js"[^>]*/);
 assert(!!reactDomScript && reactDomScript[0].includes("integrity="), "React-DOM script tag has both src and integrity");
 
-// Tailwind
-const tailwindLink = html.match(/<link[^>]*href="https:\/\/cdn\.jsdelivr\.net\/npm\/tailwindcss@2\.2\.19\/dist\/tailwind\.min\.css"[^>]*/);
-assert(!!tailwindLink && tailwindLink[0].includes("integrity="), "Tailwind link tag has both href and integrity");
+// No Tailwind — removed (unused CDN dependency)
 
 // ───────────────────────────────────────────────────────────────────
 // 4. Last-synced timestamp feature

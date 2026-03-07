@@ -5,7 +5,6 @@ const ASSETS = [
   './index.html',
   './icon.svg',
   './manifest.json',
-  'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css',
   'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js'
 ];
