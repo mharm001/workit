@@ -1192,7 +1192,7 @@
       setShowOverride(false);
     };
     const editWorkout = (entry) => {
-      dispatch({type:"EDIT_WORKOUT", editingDate: entry.date, session:{workoutId:entry.workoutId,wasOverride:entry.wasOverride||false,exercises:entry.exercises}});
+      dispatch({type:"EDIT_WORKOUT", editingDate: entry.date, session:{workoutId:entry.workoutId,wasOverride:entry.wasOverride||false,exercises:entry.exercises, manualDone:entry.exercises.map((_,i)=>i)}});
     };
     const logWeight = () => {
       const w=parseFloat(weightInput); const bf=parseFloat(bfInput);
