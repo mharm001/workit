@@ -378,7 +378,7 @@
       const toSave = { ...data };
       if (trackingSession) toSave._trackingSession = trackingSession;
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(toSave));
-    } catch(e) {}
+    } catch(e) { console.warn("saveLocal:", e); }
   }
   function loadLocal() {
     try {
@@ -388,10 +388,10 @@
       const session = data._trackingSession || null;
       delete data._trackingSession;
       return { ...data, trackingSession: session };
-    } catch(e) { return null; }
+    } catch(e) { console.warn("loadLocal:", e); return null; }
   }
   function clearLocal() {
-    try { localStorage.removeItem(LOCAL_STORAGE_KEY); } catch(e) {}
+    try { localStorage.removeItem(LOCAL_STORAGE_KEY); } catch(e) { console.warn("clearLocal:", e); }
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -482,7 +482,7 @@
       try { legacyWorkoutRows = await this._getValues("workouts!A2:B1000"); } catch(e) {}
 
       const config = {};
-      configRows.forEach(function(r){ try{config[r[0]]=JSON.parse(r[1])}catch(e){config[r[0]]=r[1]} });
+      configRows.forEach(function(r){ try{config[r[0]]=JSON.parse(r[1])}catch(e){ console.warn("Config parse failed for",r[0]); config[r[0]]=r[1]} });
 
       // Load workouts: prefer config.workouts, fall back to legacy workouts tab
       let workouts = config.workouts || {};
@@ -562,7 +562,7 @@
       case "SET_CADENCE_SCHEDULE": return { ...state, cadenceSchedule: { ...state.cadenceSchedule, ...action.data } };
       case "UPSERT_WORKOUT": { const id = action.workout.id || uid(); return { ...state, workouts: { ...state.workouts, [id]: { ...action.workout, id } } }; }
       case "DELETE_WORKOUT": {
-        const w = { ...state.workouts }; delete w[action.id];
+        const w = Object.fromEntries(Object.entries(state.workouts).filter(([k]) => k !== action.id));
         return { ...state, workouts: w,
           weeklySchedule: state.weeklySchedule.map(d => d.workoutId === action.id ? { ...d, workoutId: null } : d),
           cadenceSchedule: { ...state.cadenceSchedule, rotation: state.cadenceSchedule.rotation.filter(r => r.workoutId !== action.id) },
@@ -1734,9 +1734,10 @@
     // Auto-scroll to active exercise on mount
     useEffect(() => {
       if (activeExIdx >= 0 && cardRefs.current[activeExIdx]) {
-        setTimeout(function() {
+        var t = setTimeout(function() {
           if (cardRefs.current[activeExIdx]) cardRefs.current[activeExIdx].scrollIntoView({ behavior: "smooth", block: "center" });
         }, 300);
+        return function() { clearTimeout(t); };
       }
     }, []);
 
