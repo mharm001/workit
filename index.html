@@ -1679,8 +1679,16 @@
     const [showSwap, setShowSwap] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [collapsed, setCollapsed] = useState({});
-    const [manualDone, setManualDone] = useState([]);
-    const [skipped, setSkipped] = useState([]);
+    const manualDone = s.manualDone || [];
+    const skippedArr = s.skipped || [];
+    const setManualDone = function(updater) {
+      var val = typeof updater === "function" ? updater(manualDone) : updater;
+      dispatch({type:"UPDATE_TRACKING", data:{manualDone: val}});
+    };
+    const setSkipped = function(updater) {
+      var val = typeof updater === "function" ? updater(skippedArr) : updater;
+      dispatch({type:"UPDATE_TRACKING", data:{skipped: val}});
+    };
     const [intensityPicker, setIntensityPicker] = useState(null); // "ei-si" or null
 
     // Close intensity picker on outside tap
@@ -1693,18 +1701,18 @@
     const cardRefs = useRef([]);
 
     const isExDone = (ex, idx) => manualDone.includes(idx);
-    const isExSkipped = (idx) => skipped.includes(idx);
+    const isExSkipped = (idx) => skippedArr.includes(idx);
 
     // Determine which exercise is "active" (first not done/skipped)
     const activeExIdx = useMemo(() => {
       for (var i = 0; i < s.exercises.length; i++) {
-        if (!manualDone.includes(i) && !skipped.includes(i)) return i;
+        if (!manualDone.includes(i) && !skippedArr.includes(i)) return i;
       }
       return -1; // all done or skipped
-    }, [s.exercises, manualDone, skipped]);
+    }, [s.exercises, manualDone, skippedArr]);
 
     const doneCount = manualDone.length;
-    const skippedCount = skipped.length;
+    const skippedCount = skippedArr.length;
     const totalEx = s.exercises.length;
 
     // Auto-collapse done/skipped exercises
@@ -1713,14 +1721,14 @@
       setCollapsed(function(prev) {
         var updated = {};
         s.exercises.forEach(function(ex, i) {
-          if ((manualDone.includes(i) || skipped.includes(i)) && i !== activeExIdx) {
+          if ((manualDone.includes(i) || skippedArr.includes(i)) && i !== activeExIdx) {
             if (prev[i] !== false) updated[i] = true; // respect manual expand
           }
         });
         for (var k in prev) { if (prev[k] === false) updated[k] = false; }
         return updated;
       });
-    }, [activeExIdx, s.exercises, s.editingDate, manualDone, skipped]);
+    }, [activeExIdx, s.exercises, s.editingDate, manualDone, skippedArr]);
 
     // Auto-scroll to active exercise on mount
     useEffect(() => {
@@ -1769,6 +1777,13 @@
     const remSet = (ei,si) => {
       const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,sets:ex.sets.filter((_,j)=>j!==si)});
       dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}});
+      setIntensityPicker(null);
+    };
+    const removeEx = (ei) => {
+      const exs = s.exercises.filter((_, i) => i !== ei);
+      // Adjust done/skipped indices: remove ei, shift higher indices down
+      const adjustIdx = (arr) => arr.filter(i => i !== ei).map(i => i > ei ? i - 1 : i);
+      dispatch({type:"UPDATE_TRACKING", data:{exercises: exs, manualDone: adjustIdx(manualDone), skipped: adjustIdx(skippedArr)}});
       setIntensityPicker(null);
     };
     const [swapSearch, setSwapSearch] = useState("");
@@ -1833,6 +1848,7 @@
                   e("button", { style: { background: "#22c55e", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 6 }, onClick: function(ev) { ev.stopPropagation(); setManualDone(function(p) { return [].concat(p, [ei]); }); } }, "Done"),
                   e("button", { style: { background: "none", border: "1px solid #3f3f46", color: "#71717a", cursor: "pointer", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 6 }, onClick: function(ev) { ev.stopPropagation(); setSkipped(function(p) { return [].concat(p, [ei]); }); } }, "Skip"),
                   e("button", { style: { background:"none",border:"none",color:"#f97316",cursor:"pointer",fontSize:12 }, onClick: function(ev) { ev.stopPropagation(); setShowSwap(showSwap===ei?null:ei); } }, "Swap"),
+                  e("button", { style: { background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,padding:"2px 4px" }, onClick: function(ev) { ev.stopPropagation(); removeEx(ei); } }, "\u2715"),
                 ),
           ),
           // ── Expanded: full sets (hide if skipped) ──
@@ -1875,8 +1891,8 @@
       }),
       e("div", { style: { fontSize: 11, color: "#52525b", textAlign: "center", padding: "4px 0" } }, "Warmup sets (W) are excluded from stats and PRs."),
       e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: () => {
-        if (skipped.length > 0) {
-          var filtered = s.exercises.filter((_, i) => !skipped.includes(i));
+        if (skippedArr.length > 0) {
+          var filtered = s.exercises.filter((_, i) => !skippedArr.includes(i));
           dispatch({type:"UPDATE_TRACKING",data:{exercises:filtered}});
           setTimeout(() => dispatch({type:"SAVE_WORKOUT"}), 0);
         } else dispatch({type:"SAVE_WORKOUT"});
