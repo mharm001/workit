@@ -82,7 +82,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.56.0";
+  const APP_VERSION = "2.57.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1680,6 +1680,7 @@
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [collapsed, setCollapsed] = useState({});
     const [manualDone, setManualDone] = useState([]);
+    const [skipped, setSkipped] = useState([]);
     const [intensityPicker, setIntensityPicker] = useState(null); // "ei-si" or null
 
     // Close intensity picker on outside tap
@@ -1691,45 +1692,35 @@
     }, [intensityPicker]);
     const cardRefs = useRef([]);
 
-    const isExDone = (ex, idx) => {
-      if (manualDone.includes(idx)) return true;
-      var workSets = ex.sets.filter(st => !st.warmup && (st.rir === undefined || st.rir !== 3));
-      return workSets.length > 0 && workSets.every(st => st.weight > 0 && st.reps > 0);
-    };
+    const isExDone = (ex, idx) => manualDone.includes(idx);
+    const isExSkipped = (idx) => skipped.includes(idx);
 
-    // Determine which exercise is "active" (first with unfilled work sets)
+    // Determine which exercise is "active" (first not done/skipped)
     const activeExIdx = useMemo(() => {
       for (var i = 0; i < s.exercises.length; i++) {
-        if (isExDone(s.exercises[i], i)) continue;
-        var workSets = s.exercises[i].sets.filter(st => !st.warmup && (st.rir === undefined || st.rir !== 3));
-        if (workSets.some(st => !st.weight || !st.reps)) return i;
+        if (!manualDone.includes(i) && !skipped.includes(i)) return i;
       }
-      return -1; // all done
-    }, [s.exercises, manualDone]);
+      return -1; // all done or skipped
+    }, [s.exercises, manualDone, skipped]);
 
-    const doneCount = s.exercises.filter((ex, i) => isExDone(ex, i)).length;
+    const doneCount = manualDone.length;
+    const skippedCount = skipped.length;
     const totalEx = s.exercises.length;
 
-    // Auto-collapse: when an exercise becomes done and isn't the active one
-    // Skip auto-collapse when editing — all exercises already have data
-    const prevActiveRef = useRef(activeExIdx);
+    // Auto-collapse done/skipped exercises
     useEffect(() => {
-      if (s.editingDate) return; // don't auto-collapse in edit mode
-      var next = {};
-      s.exercises.forEach(function(ex, i) {
-        if (isExDone(ex, i) && i !== activeExIdx) next[i] = true;
-      });
+      if (s.editingDate) return;
       setCollapsed(function(prev) {
         var updated = {};
-        for (var k in next) {
-          if (prev[k] === false) continue; // user manually expanded this
-          updated[k] = true;
-        }
-        for (var k2 in prev) { if (prev[k2] === false) updated[k2] = false; }
+        s.exercises.forEach(function(ex, i) {
+          if ((manualDone.includes(i) || skipped.includes(i)) && i !== activeExIdx) {
+            if (prev[i] !== false) updated[i] = true; // respect manual expand
+          }
+        });
+        for (var k in prev) { if (prev[k] === false) updated[k] = false; }
         return updated;
       });
-      prevActiveRef.current = activeExIdx;
-    }, [activeExIdx, s.exercises, s.editingDate, manualDone]);
+    }, [activeExIdx, s.exercises, s.editingDate, manualDone, skipped]);
 
     // Auto-scroll to active exercise on mount
     useEffect(() => {
@@ -1801,9 +1792,9 @@
           ),
           e("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
             e("div", { style: { width: 80, height: 6, borderRadius: 3, background: "#3f3f46", overflow: "hidden" } },
-              e("div", { style: { width: (totalEx > 0 ? (doneCount / totalEx) * 100 : 0) + "%", height: "100%", borderRadius: 3, background: doneCount === totalEx && totalEx > 0 ? "#4ade80" : "#f97316", transition: "width 0.3s" } }),
+              e("div", { style: { width: ((totalEx - skippedCount) > 0 ? (doneCount / (totalEx - skippedCount)) * 100 : 0) + "%", height: "100%", borderRadius: 3, background: doneCount === (totalEx - skippedCount) && doneCount > 0 ? "#4ade80" : "#f97316", transition: "width 0.3s" } }),
             ),
-            e("span", { style: { fontSize: 11, color: "#71717a", fontWeight: 600 } }, doneCount + "/" + totalEx),
+            e("span", { style: { fontSize: 11, color: "#71717a", fontWeight: 600 } }, doneCount + "/" + (totalEx - skippedCount)),
           ),
         ),
         e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>dispatch({type:"CANCEL_TRACKING"}) }, "Cancel"),
@@ -1817,29 +1808,34 @@
       ),
       s.exercises.map((ex, ei) => {
         var done = isExDone(ex, ei);
+        var exSkipped = isExSkipped(ei);
         var isActive = ei === activeExIdx;
         var isCollapsed = collapsed[ei] === true;
         var cardStyle = { transition: "all 0.2s" };
-        if (isActive) { cardStyle.border = "2px solid #f97316"; cardStyle.boxShadow = "0 0 16px rgba(249,115,22,0.15)"; }
+        if (exSkipped) { cardStyle.opacity = 0.4; }
+        else if (isActive) { cardStyle.border = "2px solid #f97316"; cardStyle.boxShadow = "0 0 16px rgba(249,115,22,0.15)"; }
         else if (done) { cardStyle.opacity = isCollapsed ? 1 : 0.55; }
 
         return e("div", { key: ex.exerciseId+ei, ref: function(el) { cardRefs.current[ei] = el; }, className: "card", style: cardStyle },
           // ── Header ──
-          e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isCollapsed ? 0 : 12, cursor: done ? "pointer" : "default" }, onClick: done ? function() { toggleCollapse(ei); } : undefined },
+          e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: (isCollapsed || exSkipped) ? 0 : 12, cursor: (done || exSkipped) ? "pointer" : "default" }, onClick: (done || exSkipped) ? function() { toggleCollapse(ei); } : undefined },
             e("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-              e("div", { style: { fontWeight: 600 } }, ex.name),
+              e("div", { style: { fontWeight: 600, textDecoration: exSkipped ? "line-through" : "none", color: exSkipped ? "#52525b" : "#fff" } }, ex.name),
               done && e("span", { style: { fontSize: 11, color: "#4ade80", fontWeight: 600 } }, "\u2713"),
+              exSkipped && e("span", { style: { fontSize: 10, color: "#71717a", fontWeight: 600, textTransform: "uppercase" } }, "Skipped"),
             ),
-            isCollapsed
+            isCollapsed && done
               ? e("span", { style: { fontSize: 12, color: "#71717a" } }, exSummary(ex))
-              : e("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
-                  isActive && e("button", { style: { background: "#22c55e", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 6 }, onClick: function(ev) { ev.stopPropagation(); setManualDone(function(p) { return [].concat(p, [ei]); }); } }, "Done"),
+              : !done && !exSkipped
+              ? e("div", { style: { display: "flex", gap: 6, alignItems: "center" } },
+                  e("button", { style: { background: "#22c55e", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 6 }, onClick: function(ev) { ev.stopPropagation(); setManualDone(function(p) { return [].concat(p, [ei]); }); } }, "Done"),
+                  e("button", { style: { background: "none", border: "1px solid #3f3f46", color: "#71717a", cursor: "pointer", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 6 }, onClick: function(ev) { ev.stopPropagation(); setSkipped(function(p) { return [].concat(p, [ei]); }); } }, "Skip"),
                   e("button", { style: { background:"none",border:"none",color:"#f97316",cursor:"pointer",fontSize:12 }, onClick: function(ev) { ev.stopPropagation(); setShowSwap(showSwap===ei?null:ei); } }, "Swap"),
-                ),
+                )
+              : null,
           ),
-          // ── Collapsed: nothing else ──
-          // ── Expanded: full sets ──
-          !isCollapsed && [
+          // ── Expanded: full sets (hide if skipped) ──
+          !isCollapsed && !exSkipped && [
             // Header row
             e("div", { key: "hdr", style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 52px 20px", gap: 6, marginBottom: 4, alignItems: "center" } },
               e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
@@ -1877,13 +1873,19 @@
         );
       }),
       e("div", { style: { fontSize: 11, color: "#52525b", textAlign: "center", padding: "4px 0" } }, "Warmup sets (W) are excluded from stats and PRs."),
-      e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: ()=>dispatch({type:"SAVE_WORKOUT"}) }, s.editingDate ? "Update Workout" : "Save Workout"),
+      e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: () => {
+        if (skipped.length > 0) {
+          var filtered = s.exercises.filter((_, i) => !skipped.includes(i));
+          dispatch({type:"UPDATE_TRACKING",data:{exercises:filtered}});
+          setTimeout(() => dispatch({type:"SAVE_WORKOUT"}), 0);
+        } else dispatch({type:"SAVE_WORKOUT"});
+      } }, s.editingDate ? "Update Workout" : "Save Workout"),
       s.editingDate && e("div", { style: { display: "flex", gap: 8, marginTop: 8 } },
         e("button", { className: "btn btn-dark", style: { flex: 1, fontSize: 12 }, onClick: () => {
           var wk = state.workouts[s.workoutId]; if (!wk) return;
           var fresh = wk.exercises.map(ex => ({exerciseId:ex.id,name:ex.name,sets:Array.from({length:ex.sets},()=>({reps:ex.defaultReps,weight:0,rir:2,warmup:false}))}));
           dispatch({type:"UPDATE_TRACKING",data:{exercises:fresh}});
-          setManualDone([]);
+          setManualDone([]); setSkipped([]);
         }}, "Reset to Defaults"),
         e("button", { style: { flex: 1, fontSize: 12, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer" }, onClick: () => setShowDeleteConfirm(true) }, "Delete from History"),
       ),
