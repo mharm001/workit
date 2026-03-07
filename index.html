@@ -82,7 +82,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.63.0";
+  const APP_VERSION = "2.64.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1143,17 +1143,24 @@
       var perWeek = state.scheduleType === "weekly"
         ? state.weeklySchedule.filter(s => s.workoutId).length
         : state.cadenceSchedule.rotation.length > 0 ? Math.round(state.cadenceSchedule.rotation.filter(s => s.workoutId).length / state.cadenceSchedule.rotation.length * 7) : 0;
-      // Consistency (4 weeks, weekly totals)
-      var totalExp = 0, totalDone = 0;
-      for (var wk = 0; wk < 4; wk++) {
-        var end = new Date(); end.setDate(end.getDate() - wk * 7);
+      // Current week progress (calendar week, Mon-start)
+      var today = new Date();
+      var dayOfWeek = (today.getDay() + 6) % 7; // 0=Mon, 6=Sun
+      var weekStart = new Date(today); weekStart.setDate(today.getDate() - dayOfWeek);
+      var weekStartStr = toDateStr(weekStart), todayStr = toDateStr(today);
+      var thisWeekDone = state.history.filter(function(h) { return h.date >= weekStartStr && h.date <= todayStr; }).length;
+      // 4-week trend (completed weeks only, excludes current week)
+      var totalExp = 0, totalDone = 0, hasData = false;
+      for (var wk = 1; wk <= 4; wk++) {
+        var end = new Date(weekStart); end.setDate(end.getDate() - (wk - 1) * 7 - 1);
         var start = new Date(end); start.setDate(start.getDate() - 6);
         var startStr = toDateStr(start), endStr = toDateStr(end);
-        var done = state.history.filter(h => h.date >= startStr && h.date <= endStr).length;
+        var done = state.history.filter(function(h) { return h.date >= startStr && h.date <= endStr; }).length;
+        if (state.history.some(function(h) { return h.date <= endStr; })) hasData = true;
         totalExp += perWeek;
-        totalDone += Math.min(done, perWeek || 1);
+        totalDone += Math.min(done, perWeek);
       }
-      var consistency = perWeek > 0 && totalExp > 0 ? Math.round(totalDone / totalExp * 100) : 0;
+      var trend = hasData && perWeek > 0 && totalExp > 0 ? Math.round(totalDone / totalExp * 100) : null;
       // Volume trend (this week vs last week)
       var now = new Date(); var thisWeekStart = new Date(now); thisWeekStart.setDate(thisWeekStart.getDate() - 6);
       var lastWeekEnd = new Date(thisWeekStart); lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
@@ -1162,15 +1169,15 @@
       var thisVol = state.history.filter(function(h){return h.date >= toDateStr(thisWeekStart) && h.date <= toDateStr(now)}).reduce(function(a,h){return a+volCalc(h)},0);
       var lastVol = state.history.filter(function(h){return h.date >= toDateStr(lastWeekStart) && h.date <= toDateStr(lastWeekEnd)}).reduce(function(a,h){return a+volCalc(h)},0);
       var volDelta = lastVol > 0 ? Math.round((thisVol - lastVol) / lastVol * 100) : 0;
-      // Streak (consecutive weeks hitting perWeek target)
+      // Streak (consecutive completed calendar weeks hitting perWeek target)
       var streak = 0;
-      for (var sw = 0; sw < 52; sw++) {
-        var se = new Date(); se.setDate(se.getDate() - sw * 7);
+      for (var sw = 1; sw <= 52; sw++) {
+        var se = new Date(weekStart); se.setDate(se.getDate() - (sw - 1) * 7 - 1);
         var ss = new Date(se); ss.setDate(ss.getDate() - 6);
         var cnt = state.history.filter(function(h){return h.date >= toDateStr(ss) && h.date <= toDateStr(se)}).length;
-        if (perWeek > 0 && cnt >= perWeek) streak++; else if (sw > 0) break;
+        if (perWeek > 0 && cnt >= perWeek) streak++; else break;
       }
-      return { consistency: consistency, thisVol: thisVol, volDelta: volDelta, streak: streak, perWeek: perWeek };
+      return { thisWeekDone: thisWeekDone, trend: trend, thisVol: thisVol, volDelta: volDelta, streak: streak, perWeek: perWeek };
     }, [state.history,state.weeklySchedule,state.cadenceSchedule,state.scheduleType]);
 
     // Memoized reversed history — avoids creating a new array on every render pass
@@ -1207,10 +1214,23 @@
       e("div", { className: "text-muted", style: { fontSize: 13 } }, new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})),
       // Stats
       e("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
-        e("div", { className: "stat-box" },
-          e("div", { className: "stat-num", style: { color: dashStats.consistency >= 85 ? "#4ade80" : dashStats.consistency >= 50 ? "#facc15" : "#ef4444" } }, dashStats.consistency + "%"),
-          e("div", { className: "stat-label" }, dashStats.perWeek > 0 ? dashStats.perWeek + "x/wk goal" : "Consistency"),
-        ),
+        e("div", { className: "stat-box" }, (function() {
+          var done = Math.min(dashStats.thisWeekDone, dashStats.perWeek), goal = dashStats.perWeek || 1;
+          var progress = goal > 0 ? done / goal : 0;
+          var r = 20, circ = 2 * Math.PI * r, offset = circ * (1 - progress);
+          var ringColor = done >= goal ? "#4ade80" : "#f97316";
+          return [
+            e("div", { key: "ring", style: { position: "relative", width: 52, height: 52, margin: "0 auto 4px" } },
+              e("svg", { width: 52, height: 52, viewBox: "0 0 48 48" },
+                e("circle", { cx: 24, cy: 24, r: r, fill: "none", stroke: "#3f3f46", strokeWidth: 4 }),
+                e("circle", { cx: 24, cy: 24, r: r, fill: "none", stroke: ringColor, strokeWidth: 4, strokeLinecap: "round", strokeDasharray: circ, strokeDashoffset: offset, transform: "rotate(-90 24 24)" }),
+              ),
+              e("div", { style: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#e4e4e7" } }, done + "/" + goal),
+            ),
+            e("div", { key: "label", className: "stat-label" }, "this week"),
+            dashStats.trend !== null && e("div", { key: "trend", style: { fontSize: 9, color: "#71717a", marginTop: 2 } }, dashStats.trend + "% \u00B7 4 wks"),
+          ];
+        })()),
         e("div", { className: "stat-box" },
           e("div", { className: "stat-num" }, dashStats.thisVol >= 1000 ? (dashStats.thisVol/1000).toFixed(1) + "k" : dashStats.thisVol || "—"),
           e("div", { className: "stat-label" }, dashStats.volDelta !== 0 ? (dashStats.volDelta > 0 ? "\u2191" : "\u2193") + Math.abs(dashStats.volDelta) + "% vs last wk" : "Volume"),
