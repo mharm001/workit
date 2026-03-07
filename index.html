@@ -1786,6 +1786,13 @@
       dispatch({type:"UPDATE_TRACKING", data:{exercises: exs, manualDone: adjustIdx(manualDone), skipped: adjustIdx(skippedArr)}});
       setIntensityPicker(null);
     };
+    const [showAddEx, setShowAddEx] = useState(false);
+    const [addExSearch, setAddExSearch] = useState("");
+    const addExToSession = (name) => {
+      var newEx = {exerciseId: uid(), name: name, sets: [{reps: 10, weight: 0, rir: 2, warmup: false}]};
+      dispatch({type:"UPDATE_TRACKING", data:{exercises: [].concat(s.exercises, [newEx])}});
+      setShowAddEx(false); setAddExSearch("");
+    };
     const [swapSearch, setSwapSearch] = useState("");
     const swap = (ei,nm) => {
       const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,name:nm,exerciseId:uid()});
@@ -1889,6 +1896,7 @@
           ],
         );
       }),
+      e("button", { className: "btn btn-ghost", style: { width: "100%", fontSize: 12, padding: 8 }, onClick: () => setShowAddEx(true) }, "+ Add Exercise"),
       e("div", { style: { fontSize: 11, color: "#52525b", textAlign: "center", padding: "4px 0" } }, "Warmup sets (W) are excluded from stats and PRs."),
       e("button", { className: "btn btn-green", style: { width: "100%", padding: 14, fontSize: 16 }, onClick: () => {
         if (skippedArr.length > 0) {
@@ -1911,6 +1919,44 @@
         onConfirm: () => { setShowDeleteConfirm(false); dispatch({type:"DELETE_HISTORY_ENTRY",date:s.editingDate,workoutId:s.workoutId}); },
         onCancel: () => setShowDeleteConfirm(false),
       }),
+      // ── Add Exercise Bottom Sheet ──
+      showAddEx && (() => {
+        var allCats = Object.keys(EXERCISE_LIBRARY);
+        var q = addExSearch.toLowerCase();
+        var results = [];
+        allCats.forEach(function(cat) {
+          EXERCISE_LIBRARY[cat].forEach(function(ex) {
+            if (!q || ex.name.toLowerCase().includes(q)) results.push({name: ex.name, cat: cat});
+          });
+        });
+        if (q) results = results.slice(0, 30);
+        return e("div", { style: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "15vh" }, onClick: function() { setShowAddEx(false); setAddExSearch(""); } },
+          e("div", { style: { background: "#1c1c1e", borderRadius: 16, width: "calc(100% - 32px)", maxWidth: 480, maxHeight: "70vh", display: "flex", flexDirection: "column", overflow: "hidden" }, onClick: function(ev) { ev.stopPropagation(); } },
+            e("div", { style: { display: "flex", justifyContent: "center", padding: "10px 0 4px" } },
+              e("div", { style: { width: 32, height: 4, borderRadius: 2, background: "#3f3f46" } }),
+            ),
+            e("div", { style: { padding: "8px 16px 12px", borderBottom: "1px solid #27272a" } },
+              e("div", { style: { fontSize: 15, fontWeight: 600, color: "#fff" } }, "Add Exercise"),
+              e("input", { type: "text", placeholder: "Search exercises...", value: addExSearch, onChange: function(ev) { setAddExSearch(ev.target.value); }, className: "input", style: { marginTop: 8, fontSize: 14 }, autoFocus: true }),
+            ),
+            e("div", { style: { overflowY: "auto", padding: "0 16px 16px", flex: 1 } },
+              q ? results.map(function(r) {
+                return e("button", { key: r.name, style: { display: "block", width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#e4e4e7", fontSize: 13, cursor: "pointer" }, onClick: function() { addExToSession(r.name); } },
+                  r.name, e("span", { style: { fontSize: 10, color: "#52525b", marginLeft: 8 } }, r.cat),
+                );
+              }) : allCats.map(function(cat) {
+                return e("div", { key: cat, style: { paddingTop: 12 } },
+                  e("div", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "#71717a", marginBottom: 6 } }, cat),
+                  EXERCISE_LIBRARY[cat].slice(0, 8).map(function(ex) {
+                    return e("button", { key: ex.name, style: { display: "block", width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 6, border: "none", background: "transparent", color: "#a1a1aa", fontSize: 13, cursor: "pointer" }, onClick: function() { addExToSession(ex.name); } }, ex.name);
+                  }),
+                );
+              }),
+              q && results.length === 0 && e("div", { style: { padding: "20px 0", textAlign: "center", color: "#52525b", fontSize: 13 } }, "No matches"),
+            ),
+          ),
+        );
+      })(),
       // ── Swap Bottom Sheet ──
       showSwap !== null && (() => {
         var ex = s.exercises[showSwap];
