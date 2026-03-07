@@ -75,12 +75,10 @@
     .move-btn:active:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
     .move-btn:disabled { opacity: 0.25; cursor: default; }
     /* NumericStepper */
-    .nst { display: flex; align-items: center; background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: 100%; height: 34px; transition: border-color 0.15s; }
-    .nst:focus-within { border-color: var(--accent); }
-    .nst-btn { flex: 0 0 26px; height: 100%; background: none; border: none; color: #71717a; font-size: 15px; font-weight: 700; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; transition: background 0.1s, color 0.1s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
-    .nst-btn:active { background: rgba(249,115,22,0.18); color: #f97316; }
-    .nst-input { flex: 1; min-width: 0; height: 100%; background: none; border: none; outline: none; color: #fff; font-size: 13px; font-weight: 600; text-align: center; padding: 0; }
-    .nst-input::placeholder { color: #52525b; font-weight: 400; }
+    .nst-compact { display: flex; align-items: center; justify-content: center; background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; width: 100%; height: 34px; transition: border-color 0.15s; -webkit-tap-highlight-color: transparent; }
+    .nst-compact:focus-within { border-color: var(--accent); }
+    .nst-compact input { width: 100%; height: 100%; background: none; border: none; outline: none; color: #fff; font-size: 14px; font-weight: 600; text-align: center; padding: 0; }
+    .nst-compact input::placeholder { color: #52525b; font-weight: 400; }
   </style>
 </head>
 <body>
@@ -97,7 +95,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.54.0";
+  const APP_VERSION = "2.56.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -1045,17 +1043,9 @@
       if (ev.key === "ArrowDown") { ev.preventDefault(); decrement(ev); }
     };
 
-    return e("div", { className: "nst" },
-      e("button", {
-        className: "nst-btn",
-        onPointerDown: decrement,
-        tabIndex: -1,
-        "aria-label": "decrease",
-        type: "button",
-      }, "\u2212"),
+    return e("div", { className: "nst-compact" },
       e("input", {
         ref: inputRef,
-        className: "nst-input",
         name: name,
         type: "text",
         inputMode: inputMode || "decimal",
@@ -1066,13 +1056,6 @@
         onChange: handleChange,
         onKeyDown: handleKeyDown,
       }),
-      e("button", {
-        className: "nst-btn",
-        onPointerDown: increment,
-        tabIndex: -1,
-        "aria-label": "increase",
-        type: "button",
-      }, "\u002B"),
     );
   }
 
@@ -1704,21 +1687,36 @@
     const [showSwap, setShowSwap] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [collapsed, setCollapsed] = useState({});
+    const [manualDone, setManualDone] = useState([]);
+    const [intensityPicker, setIntensityPicker] = useState(null); // "ei-si" or null
+
+    // Close intensity picker on outside tap
+    useEffect(() => {
+      if (!intensityPicker) return;
+      const handler = () => setIntensityPicker(null);
+      document.addEventListener("pointerdown", handler);
+      return () => document.removeEventListener("pointerdown", handler);
+    }, [intensityPicker]);
     const cardRefs = useRef([]);
+
+    const isExDone = (ex, idx) => {
+      if (manualDone.includes(idx)) return true;
+      var workSets = ex.sets.filter(st => !st.warmup && (st.rir === undefined || st.rir !== 3));
+      return workSets.length > 0 && workSets.every(st => st.weight > 0 && st.reps > 0);
+    };
 
     // Determine which exercise is "active" (first with unfilled work sets)
     const activeExIdx = useMemo(() => {
       for (var i = 0; i < s.exercises.length; i++) {
+        if (isExDone(s.exercises[i], i)) continue;
         var workSets = s.exercises[i].sets.filter(st => !st.warmup && (st.rir === undefined || st.rir !== 3));
         if (workSets.some(st => !st.weight || !st.reps)) return i;
       }
       return -1; // all done
-    }, [s.exercises]);
+    }, [s.exercises, manualDone]);
 
-    const isExDone = (ex) => {
-      var workSets = ex.sets.filter(st => !st.warmup && (st.rir === undefined || st.rir !== 3));
-      return workSets.length > 0 && workSets.every(st => st.weight > 0 && st.reps > 0);
-    };
+    const doneCount = s.exercises.filter((ex, i) => isExDone(ex, i)).length;
+    const totalEx = s.exercises.length;
 
     // Auto-collapse: when an exercise becomes done and isn't the active one
     // Skip auto-collapse when editing — all exercises already have data
@@ -1727,7 +1725,7 @@
       if (s.editingDate) return; // don't auto-collapse in edit mode
       var next = {};
       s.exercises.forEach(function(ex, i) {
-        if (isExDone(ex) && i !== activeExIdx) next[i] = true;
+        if (isExDone(ex, i) && i !== activeExIdx) next[i] = true;
       });
       setCollapsed(function(prev) {
         var updated = {};
@@ -1739,7 +1737,7 @@
         return updated;
       });
       prevActiveRef.current = activeExIdx;
-    }, [activeExIdx, s.exercises, s.editingDate]);
+    }, [activeExIdx, s.exercises, s.editingDate, manualDone]);
 
     // Auto-scroll to active exercise on mount
     useEffect(() => {
@@ -1787,6 +1785,7 @@
     const remSet = (ei,si) => {
       const exs = s.exercises.map((ex,i)=>i!==ei?ex:{...ex,sets:ex.sets.filter((_,j)=>j!==si)});
       dispatch({type:"UPDATE_TRACKING",data:{exercises:exs}});
+      setIntensityPicker(null);
     };
     const [swapSearch, setSwapSearch] = useState("");
     const swap = (ei,nm) => {
@@ -1802,20 +1801,29 @@
 
     return e("div", { className: "fade-in", style: { padding: 16, display: "flex", flexDirection: "column", gap: 16 } },
       e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-        e("div", null,
-          e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, (w||{}).name || "Workout"),
-          s.editingDate ? e("span", { style: { fontSize: 12, color: "#60a5fa" } }, "Editing") : s.wasOverride && e("span", { style: { fontSize: 12, color: "#f97316" } }, "Override"),
+        e("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
+          e("div", null,
+            e("h2", { style: { fontSize: 20, fontWeight: 700, margin: 0 } }, (w||{}).name || "Workout"),
+            s.editingDate ? e("span", { style: { fontSize: 12, color: "#60a5fa" } }, "Editing") : s.wasOverride && e("span", { style: { fontSize: 12, color: "#f97316" } }, "Override"),
+          ),
+          e("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+            e("div", { style: { width: 80, height: 6, borderRadius: 3, background: "#3f3f46", overflow: "hidden" } },
+              e("div", { style: { width: (totalEx > 0 ? (doneCount / totalEx) * 100 : 0) + "%", height: "100%", borderRadius: 3, background: doneCount === totalEx && totalEx > 0 ? "#4ade80" : "#f97316", transition: "width 0.3s" } }),
+            ),
+            e("span", { style: { fontSize: 11, color: "#71717a", fontWeight: 600 } }, doneCount + "/" + totalEx),
+          ),
         ),
         e("button", { style: { background:"none",border:"none",color:"#a1a1aa",cursor:"pointer",fontSize:13 }, onClick: ()=>dispatch({type:"CANCEL_TRACKING"}) }, "Cancel"),
       ),
-      e("div", { style: { display: "flex", gap: 12, flexWrap: "wrap", padding: "4px 0" } },
+      e("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", padding: "4px 0" } },
         INTENSITY_OPTIONS.map(opt => e("span", { key: opt.value, style: { fontSize: 11, color: "#71717a", display: "flex", alignItems: "center", gap: 4 } },
-          e("span", { style: { display: "inline-block", width: 14, height: 14, borderRadius: 3, background: opt.color, textAlign: "center", lineHeight: "14px", fontSize: 9, fontWeight: 700, color: opt.value===3?"#a1a1aa":"#000" } }, opt.short),
+          e("span", { style: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: opt.color } }),
+          e("span", { style: { fontWeight: 600, color: opt.color } }, opt.short),
           opt.label,
         )),
       ),
       s.exercises.map((ex, ei) => {
-        var done = isExDone(ex);
+        var done = isExDone(ex, ei);
         var isActive = ei === activeExIdx;
         var isCollapsed = collapsed[ei] === true;
         var cardStyle = { transition: "all 0.2s" };
@@ -1831,29 +1839,42 @@
             ),
             isCollapsed
               ? e("span", { style: { fontSize: 12, color: "#71717a" } }, exSummary(ex))
-              : e("button", { style: { background:"none",border:"none",color:"#f97316",cursor:"pointer",fontSize:12 }, onClick: function(ev) { ev.stopPropagation(); setShowSwap(showSwap===ei?null:ei); } }, "Swap"),
+              : e("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+                  isActive && e("button", { style: { background: "#22c55e", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 6 }, onClick: function(ev) { ev.stopPropagation(); setManualDone(function(p) { return [].concat(p, [ei]); }); } }, "Done"),
+                  e("button", { style: { background:"none",border:"none",color:"#f97316",cursor:"pointer",fontSize:12 }, onClick: function(ev) { ev.stopPropagation(); setShowSwap(showSwap===ei?null:ei); } }, "Swap"),
+                ),
           ),
           // ── Collapsed: nothing else ──
           // ── Expanded: full sets ──
           !isCollapsed && [
             // Header row
-            e("div", { key: "hdr", style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 148px 20px", gap: 4, marginBottom: 4, alignItems: "center" } },
+            e("div", { key: "hdr", style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 52px 20px", gap: 6, marginBottom: 4, alignItems: "center" } },
               e("div", { style: { fontSize: 10, color: "#71717a" } }, "#"),
               e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, state.weightUnit),
               e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "Reps"),
-              e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "Intensity"),
+              e("div", { style: { fontSize: 10, color: "#71717a", textAlign: "center" } }, "Effort"),
               e("div"),
             ),
             ex.sets.map((set, si) => {
               const rir = set.rir !== undefined ? set.rir : (set.effort !== undefined ? effortToIntensity(set.effort) : 2);
               const isWarmup = set.warmup || rir === 3;
               const ghostW = (prevWeights[ex.name] || [])[si];
-              return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 148px 20px", gap: 4, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
+              const curOpt = INTENSITY_OPTIONS.find(o => o.value === rir) || INTENSITY_OPTIONS[2];
+              const pickerKey = ei + "-" + si;
+              const pickerOpen = intensityPicker === pickerKey;
+              return e("div", { key: si, style: { display: "grid", gridTemplateColumns: "20px 1fr 1fr 52px 20px", gap: 6, alignItems: "center", marginBottom: 4, opacity: isWarmup ? 0.5 : 1 } },
                 e("div", { style: { fontSize: 12, color: "#71717a", textAlign: "center" } }, si+1),
                 e(NumericStepper, { name: "setWeight", value: set.weight || 0, onChange: v => updSet(ei,si,"weight",v), step: state.weightUnit === "kg" ? 2.5 : 5, min: 0, placeholder: ghostW ? String(ghostW) : state.weightUnit, inputMode: "decimal" }),
                 e(NumericStepper, { name: "setReps", value: set.reps || 0, onChange: v => updSet(ei,si,"reps",Math.round(v)), step: 1, min: 0, max: 99, placeholder: "reps", inputMode: "numeric" }),
-                e("div", { className: "intensity-pills" },
-                  INTENSITY_OPTIONS.map(opt => e("button", { key: opt.value, className: "intensity-pill", style: { background: rir===opt.value ? opt.color : "#27272a", color: rir===opt.value ? (opt.value===3?"#a1a1aa":"#000") : "#52525b" }, onClick: () => updSet(ei,si,{rir:opt.value,warmup:opt.value===3}) }, opt.short))
+                e("div", { style: { position: "relative" } },
+                  e("button", { onPointerDown: function(ev) { ev.stopPropagation(); }, onClick: () => setIntensityPicker(pickerOpen ? null : pickerKey), style: { width: 52, height: 34, borderRadius: 8, border: "none", background: curOpt.color, color: curOpt.value === 3 ? "#a1a1aa" : "#000", fontSize: 11, fontWeight: 700, cursor: "pointer", WebkitTapHighlightColor: "transparent" } }, curOpt.short),
+                  pickerOpen && e("div", { onPointerDown: function(ev) { ev.stopPropagation(); }, style: { position: "absolute", right: 0, top: 38, zIndex: 50, background: "#27272a", border: "1px solid #3f3f46", borderRadius: 10, padding: 4, display: "flex", flexDirection: "column", gap: 2, boxShadow: "0 8px 24px rgba(0,0,0,0.5)" } },
+                    INTENSITY_OPTIONS.map(opt => e("button", { key: opt.value, onClick: () => { updSet(ei, si, { rir: opt.value, warmup: opt.value === 3 }); setIntensityPicker(null); }, style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", border: "none", borderRadius: 8, background: rir === opt.value ? "rgba(249,115,22,0.15)" : "transparent", cursor: "pointer", whiteSpace: "nowrap" } },
+                      e("span", { style: { width: 10, height: 10, borderRadius: "50%", background: opt.color, flexShrink: 0 } }),
+                      e("span", { style: { fontSize: 12, fontWeight: 600, color: opt.color } }, opt.short),
+                      e("span", { style: { fontSize: 11, color: "#a1a1aa" } }, opt.label),
+                    )),
+                  ),
                 ),
                 e("button", { onClick: ()=>remSet(ei,si), style: { background:"none",border:"none",color:"#52525b",cursor:"pointer",fontSize:12 } }, "\u2715"),
               );
@@ -1869,6 +1890,7 @@
           var wk = state.workouts[s.workoutId]; if (!wk) return;
           var fresh = wk.exercises.map(ex => ({exerciseId:ex.id,name:ex.name,sets:Array.from({length:ex.sets},()=>({reps:ex.defaultReps,weight:0,rir:2,warmup:false}))}));
           dispatch({type:"UPDATE_TRACKING",data:{exercises:fresh}});
+          setManualDone([]);
         }}, "Reset to Defaults"),
         e("button", { style: { flex: 1, fontSize: 12, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer" }, onClick: () => setShowDeleteConfirm(true) }, "Delete from History"),
       ),
@@ -1932,7 +1954,6 @@
   function Analytics({ state }) {
     const [selEx, setSelEx] = useState("");
     const [selW, setSelW] = useState("");
-    const [trendTab, setTrendTab] = useState("intensity");
     const allEx = useMemo(()=>{const n=new Set();state.history.forEach(h=>h.exercises.forEach(x=>n.add(x.name)));return[...n].sort();},[state.history]);
     const allWN = useMemo(()=>{const n=new Set();state.history.forEach(h=>n.add(h.workoutName));return[...n].sort();},[state.history]);
 
@@ -1993,20 +2014,18 @@
         e("div", { className: "label" }, "Body Composition"),
         e(BodyCompChart, { weightData: weightData, bfData: bfData, weightUnit: state.weightUnit, width: 340, height: 170 }),
       ),
-      // Workout Trends (Intensity / Volume)
+      // Workout Trends (Intensity + Volume)
       e("div", { className: "card" },
         e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
-          e("div", { style: { display: "flex", background: "#27272a", borderRadius: 6, padding: 2 } },
-            ["intensity","volume"].map(t => e("button", { key: t, style: { padding: "4px 12px", borderRadius: 4, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer", background: trendTab===t?"#f97316":"transparent", color: trendTab===t?"#fff":"#71717a", textTransform: "capitalize" }, onClick: () => setTrendTab(t) }, t))
-          ),
+          e("div", { className: "label", style: { margin: 0 } }, "Workout Trends"),
           e("select", { name: "filterWorkout", value: selW, onChange: ev => setSelW(ev.target.value), style: { fontSize: 12 } },
             e("option", { value: "" }, "All Workouts"),
             allWN.map(n => e("option", { key: n, value: n }, n)),
           ),
         ),
         // Intensity chart
-        trendTab === "intensity" && (intensityTrend.length >= 2 ? (function(){
-          var d=intensityTrend,w=340,h=150,pad=40;
+        intensityTrend.length >= 2 ? (function(){
+          var d=intensityTrend,w=340,h=130,pad=40;
           var pts=d.map(function(p,i){
             var x=pad+(i/(d.length-1))*(w-pad*2);
             var y=pad+((2.5-p.avgRir)/2.5)*(h-pad*2);
@@ -2015,6 +2034,7 @@
           });
           var pathD=pts.map(function(p,i){return(i===0?"M":"L")+p.x+","+p.y}).join(" ");
           return e("div",null,
+            e("div",{style:{fontSize:10,color:"#71717a",fontWeight:600,marginBottom:4}},"Intensity"),
             e("div",{style:{overflowX:"auto"}},
               e("svg",{width:w,height:h,viewBox:"0 0 "+w+" "+h,style:{display:"block",margin:"0 auto"}},
                 [["MAX",0],["HARD",1],["LITE",2]].map(function(pair){
@@ -2025,20 +2045,39 @@
                     e("text",{x:pad-6,y:yy+4,textAnchor:"end",fill:col,fontSize:10,fontWeight:600},pair[0]),
                   );
                 }),
-                d.length<=12?pts.map(function(p,i){return e("text",{key:"x"+i,x:p.x,y:h-pad+14,textAnchor:"middle",fill:"#71717a",fontSize:8},p.date)})
-                :[0,Math.floor(d.length/2),d.length-1].map(function(i){return e("text",{key:"x"+i,x:pts[i].x,y:h-pad+14,textAnchor:"middle",fill:"#71717a",fontSize:8},pts[i].date)}),
                 e("path",{d:pathD,fill:"none",stroke:"#a1a1aa",strokeWidth:1.5}),
                 pts.map(function(p,i){return e("circle",{key:i,cx:p.x,cy:p.y,r:4,fill:p.c})}),
               ),
             ),
-            e("div",{style:{display:"flex",justifyContent:"center",gap:12,marginTop:6}},
+            e("div",{style:{display:"flex",justifyContent:"center",gap:12,marginTop:4}},
               INTENSITY_OPTIONS.filter(function(o){return o.value!==3}).map(function(o){return e("span",{key:o.value,style:{fontSize:10,color:"#71717a",display:"flex",alignItems:"center",gap:3}},
                 e("span",{style:{width:8,height:8,borderRadius:"50%",background:o.color,display:"inline-block"}}),o.short)}),
             ),
           );
-        })() : e("p", { style: { color: "#52525b", fontSize: 13, textAlign: "center", padding: "24px 0" } }, "Track at least 2 workouts to see intensity trends")),
-        // Volume chart
-        trendTab === "volume" && e(MiniBarChart, { data: volTrend, dataKey: "volume", color: "#f97316", width: 340, height: 160 }),
+        })() : e("p", { style: { color: "#52525b", fontSize: 13, textAlign: "center", padding: "24px 0" } }, "Track at least 2 workouts to see intensity trends"),
+        // Volume sparkline
+        volTrend.length >= 2 && (function(){
+          var d=volTrend,w=340,h=48,pad=40,barGap=2;
+          var maxV=Math.max.apply(null,d.map(function(p){return p.volume}))||1;
+          var barW=Math.max(2,Math.min(12,(w-pad*2-barGap*(d.length-1))/d.length));
+          var totalW=d.length*barW+(d.length-1)*barGap;
+          var startX=pad+(w-pad*2-totalW)/2;
+          return e("div",{style:{marginTop:8,borderTop:"1px solid #3f3f46",paddingTop:8}},
+            e("div",{style:{fontSize:10,color:"#71717a",fontWeight:600,marginBottom:4}},"Volume"),
+            e("svg",{width:w,height:h,viewBox:"0 0 "+w+" "+h,style:{display:"block",margin:"0 auto"}},
+              d.map(function(p,i){
+                var barH=Math.max(2,(p.volume/maxV)*(h-14));
+                var x=startX+i*(barW+barGap);
+                return e("rect",{key:i,x:x,y:h-4-barH,width:barW,height:barH,rx:1,fill:"#f97316",opacity:0.55});
+              }),
+              // Date labels: first, middle, last
+              d.length>=2&&[0,Math.floor(d.length/2),d.length-1].map(function(i){
+                var x=startX+i*(barW+barGap)+barW/2;
+                return e("text",{key:"d"+i,x:x,y:h,textAnchor:"middle",fill:"#52525b",fontSize:7},d[i].date);
+              }),
+            ),
+          );
+        })(),
       ),
       // Exercise progress (only show when there's enough data)
       allEx.length > 0 && state.history.length >= 2 && e("div", { className: "card" },
