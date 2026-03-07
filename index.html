@@ -82,7 +82,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.59.0";
+  const APP_VERSION = "2.60.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
@@ -938,10 +938,12 @@
         e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
           e("span", { style: { fontSize: 13, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#fff" } }, "Workit"),
           syncing && e("div", { className: "spinner", style: { width: 12, height: 12, borderWidth: 2 } }),
-          statusText && e("span", { style: { fontSize: 10, color: statusDot, display: "flex", alignItems: "center", gap: 3 } },
-            e("span", { style: { width: 6, height: 6, borderRadius: "50%", background: statusDot, display: "inline-block" } }), statusText),
+          statusText && (syncStatus === "error" || syncStatus === "offline" || !isConnected
+            ? e("button", { onClick: onReconnect, "aria-label": syncStatus === "error" ? "Sync failed — tap to retry" : "Tap to sync", style: { background: "none", border: "none", color: statusDot, fontSize: 10, cursor: "pointer", padding: "12px 8px", margin: "-12px -8px", display: "flex", alignItems: "center", gap: 3 } },
+                e("span", { style: { width: 6, height: 6, borderRadius: "50%", background: statusDot, display: "inline-block", flexShrink: 0 } }), statusText)
+            : e("span", { style: { fontSize: 10, color: statusDot, display: "flex", alignItems: "center", gap: 3 } },
+                e("span", { style: { width: 6, height: 6, borderRadius: "50%", background: statusDot, display: "inline-block" } }), statusText)),
           agoText && e("span", { style: { fontSize: 9, color: "#71717a" } }, agoText),
-          !isConnected && e("button", { onClick: onReconnect, style: { background: "none", border: "none", color: "#f97316", fontSize: 12, cursor: "pointer", padding: 0 } }, "Sync"),
         ),
         isConnected && e("button", { onClick: onSignOut, style: { background: "none", border: "none", color: "#71717a", fontSize: 12, cursor: "pointer" } }, "Sign out"),
       ),
@@ -1140,7 +1142,7 @@
     const dashStats = useMemo(() => {
       var perWeek = state.scheduleType === "weekly"
         ? state.weeklySchedule.filter(s => s.workoutId).length
-        : state.cadenceSchedule.rotation.length > 0 ? Math.min(state.cadenceSchedule.rotation.length, 7) : 0;
+        : state.cadenceSchedule.rotation.length > 0 ? Math.round(state.cadenceSchedule.rotation.filter(s => s.workoutId).length / state.cadenceSchedule.rotation.length * 7) : 0;
       // Consistency (4 weeks, weekly totals)
       var totalExp = 0, totalDone = 0;
       for (var wk = 0; wk < 4; wk++) {
