@@ -19,12 +19,7 @@
     :root { --bg: #18181b; --card: #27272a; --border: #3f3f46; --muted: #a1a1aa; --accent: #f97316; }
     body { background: var(--bg); margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #fff; }
     * { box-sizing: border-box; }
-    .bg-card { background: var(--card); }
-    .bg-darker { background: #1f1f23; }
     .text-muted { color: var(--muted); }
-    .text-accent { color: var(--accent); }
-    .bg-accent { background: var(--accent); }
-    .border-dark { border-color: var(--border); }
     .btn { padding: 10px 16px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; font-size: 14px; transition: opacity 0.2s; }
     .btn:hover { opacity: 0.85; }
     .btn-accent { background: var(--accent); color: #fff; }
@@ -37,25 +32,17 @@
     .input-sm { padding: 6px 8px; font-size: 12px; text-align: center; width: 60px; }
     .card { background: var(--card); border-radius: 12px; padding: 16px; }
     .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 8px; }
-    .pill { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
     .spinner { border: 3px solid #3f3f46; border-top: 3px solid var(--accent); border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 50; }
     .tab { flex: 1; padding: 10px 0 8px; text-align: center; font-size: 11px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; transition: all 0.2s; }
     .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(249,115,22,0.05); }
     .tab-icon { font-size: 16px; display: flex; justify-content: center; margin-bottom: 2px; }
-    .grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-    .intensity-pills { display: flex; gap: 4px; }
-    .intensity-pill { padding: 5px 6px; border-radius: 6px; border: none; font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.15s; min-width: 32px; text-align: center; }
     select { background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; padding: 8px 32px 8px 12px; color: #fff; font-size: 14px; outline: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 8px center; background-repeat: no-repeat; background-size: 1.2em; }
     select:focus { border-color: var(--accent); }
-    .flex-center { display: flex; align-items: center; justify-content: center; }
-    .set-grid { display: grid; grid-template-columns: 24px 1fr 70px 1fr 24px; gap: 4px; align-items: center; }
     .fade-in { animation: fadeIn 0.3s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .user-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid #1f1f23; }
-    .google-btn { display: flex; align-items: center; justify-content: center; gap: 12px; background: #fff; color: #333; font-weight: 500; padding: 12px; border-radius: 8px; border: none; cursor: pointer; width: 100%; font-size: 15px; }
-    .google-btn:hover { background: #f3f4f6; }
     .stat-box { background: var(--card); border-radius: 8px; padding: 12px; text-align: center; }
     .stat-num { font-size: 24px; font-weight: 700; color: var(--accent); }
     .stat-label { font-size: 11px; color: var(--muted); }
@@ -617,7 +604,11 @@
       }
       case "SET_WEIGHT_UNIT": return { ...state, weightUnit: action.unit };
       case "LOAD_FROM_SHEETS": return { ...state, ...action.data };
-      case "IMPORT_STATE": return { ...action.state, activeView: "dashboard", trackingSession: null };
+      case "IMPORT_STATE": {
+        const allowed = ["scheduleType","weeklySchedule","cadenceSchedule","workouts","history","weightLog","weightUnit"];
+        const clean = {}; allowed.forEach(k => { if (action.state[k] !== undefined) clean[k] = action.state[k]; });
+        return { ...state, ...clean, activeView: "dashboard", trackingSession: null };
+      }
       default: return state;
     }
   }
@@ -1374,7 +1365,7 @@
     const wl = Object.values(state.workouts);
     const setSlot = (day, wid) => { dispatch({type:"SET_WEEKLY_SCHEDULE",schedule:state.weeklySchedule.map(s=>s.day===day?{...s,workoutId:wid}:s)}); };
     const addRot = wid => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:[...state.cadenceSchedule.rotation,{workoutId:wid}]}}); };
-    const remRot = i => { dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:state.cadenceSchedule.rotation.filter((_,idx)=>idx!==i)}}); };
+    const remRot = i => { const newRot = state.cadenceSchedule.rotation.filter((_,idx)=>idx!==i); const ci = state.cadenceSchedule.currentIndex; dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:newRot,currentIndex:newRot.length>0?Math.min(ci,newRot.length-1):0}}); };
     const moveRot = (i,dir) => {const r=[...state.cadenceSchedule.rotation];const n=i+dir;if(n<0||n>=r.length)return;[r[i],r[n]]=[r[n],r[i]];dispatch({type:"SET_CADENCE_SCHEDULE",data:{rotation:r}});};
     const [pendingSwitchType, setPendingSwitchType] = React.useState(null);
     const eitherHasData = state.weeklySchedule.some(s => s.workoutId) || state.cadenceSchedule.rotation.length > 0;
@@ -1433,7 +1424,7 @@
             e("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 } },
               state.cadenceSchedule.rotation.map((slot, i) => {
                 const w = slot.workoutId ? state.workouts[slot.workoutId] : null;
-                return e("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, background: "#3f3f46", borderRadius: 8, padding: "8px 12px" } },
+                return e("div", { key: (slot.workoutId || "rest") + "-" + i, style: { display: "flex", alignItems: "center", gap: 8, background: "#3f3f46", borderRadius: 8, padding: "8px 12px" } },
                   e("span", { style: { fontSize: 11, color: "#71717a", width: 20 } }, i+1),
                   e("span", { style: { flex: 1, fontSize: 14, color: w ? "#fff" : "#71717a" } }, w ? w.name : "Rest"),
                   e("button", { onClick: () => moveRot(i,-1), style: { background: "none", border: "none", color: "#71717a", cursor: "pointer", fontSize: 12 } }, "▲"),
@@ -1613,7 +1604,7 @@
               e("div", null,
                 e("div", { style: { fontSize: 11, color: "#a1a1aa", marginBottom: 4 } }, "Alternatives" + (ex.alternatives.length > 0 ? " (" + ex.alternatives.length + ")" : "")),
                 e("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 } },
-                  ex.alternatives.map((alt, ai) => e("span", { key: ai, style: { background: "#3f3f46", color: "#d4d4d8", fontSize: 11, padding: "4px 8px", borderRadius: 9999, display: "inline-flex", alignItems: "center", gap: 4 } },
+                  ex.alternatives.map((alt, ai) => e("span", { key: alt + "-" + ai, style: { background: "#3f3f46", color: "#d4d4d8", fontSize: 11, padding: "4px 8px", borderRadius: 9999, display: "inline-flex", alignItems: "center", gap: 4 } },
                     alt, e("button", { onClick: () => remAlt(ex.id, ai), style: { background:"none",border:"none",color:"#71717a",cursor:"pointer",fontSize:11 } }, "×"),
                   ))
                 ),
