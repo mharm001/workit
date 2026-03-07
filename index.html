@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WorkIt - Workout Tracker</title>
   <meta name="apple-mobile-web-app-title" content="Workit">
   <meta name="application-name" content="Workit">
@@ -35,7 +35,7 @@
     .spinner { border: 3px solid #3f3f46; border-top: 3px solid var(--accent); border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 50; }
-    .tab { flex: 1; padding: 10px 0 8px; text-align: center; font-size: 11px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab { flex: 1; padding: 10px 0 8px; text-align: center; font-size: 11px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s, background 0.2s; }
     .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(249,115,22,0.05); }
     .tab-icon { font-size: 16px; display: flex; justify-content: center; margin-bottom: 2px; }
     select { background: #3f3f46; border: 1px solid var(--border); border-radius: 8px; padding: 8px 32px 8px 12px; color: #fff; font-size: 14px; outline: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 8px center; background-repeat: no-repeat; background-size: 1.2em; }
@@ -46,18 +46,18 @@
     .stat-box { background: var(--card); border-radius: 8px; padding: 12px; text-align: center; }
     .stat-num { font-size: 24px; font-weight: 700; color: var(--accent); }
     .stat-label { font-size: 11px; color: var(--muted); }
-    .login-cta-btn { width: 100%; padding: 16px 24px; border-radius: 12px; border: 2px solid var(--accent); background: transparent; color: var(--accent); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-transform: uppercase; letter-spacing: 1px; transition: background 0.2s, color 0.2s; }
+    .login-cta-btn { width: 100%; padding: 16px 24px; border-radius: 12px; border: 2px solid var(--accent); background: transparent; color: var(--accent); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-transform: uppercase; letter-spacing: 1px; transition: background-color 0.2s, color 0.2s; }
     .login-cta-btn:hover:not(:disabled) { background: var(--accent); color: #000; }
     .login-info-btn { background: none; border: none; color: #525252; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 8px 0; transition: color 0.2s; }
     .login-info-btn:hover { color: #a1a1aa; }
     .lib-exercise-btn { text-align: left; padding: 8px 12px; border-radius: 6px; border: none; background: transparent; color: #e4e4e7; font-size: 13px; cursor: pointer; width: 100%; }
     .lib-exercise-btn:hover { background: #3f3f46; }
-    .drag-handle { display: flex; align-items: center; justify-content: center; width: 32px; min-width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); cursor: grab; color: #52525b; font-size: 18px; padding: 0; touch-action: none; user-select: none; -webkit-user-select: none; transition: all 0.15s; }
+    .drag-handle { display: flex; align-items: center; justify-content: center; width: 32px; min-width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); cursor: grab; color: #52525b; font-size: 18px; padding: 0; touch-action: none; user-select: none; -webkit-user-select: none; transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
     .drag-handle:hover { background: #3f3f46; color: #71717a; border-color: #52525b; }
     .drag-handle:active { cursor: grabbing; }
     .ex-card-dragging { opacity: 0.4; }
     .ex-card-drag-over { border: 2px solid var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-    .move-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: #71717a; cursor: pointer; transition: all 0.15s; padding: 0; }
+    .move-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: #71717a; cursor: pointer; transition: background-color 0.15s, color 0.15s, border-color 0.15s; padding: 0; }
     .move-btn:hover:not(:disabled) { background: #3f3f46; color: #e4e4e7; border-color: #52525b; }
     .move-btn:active:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
     .move-btn:disabled { opacity: 0.25; cursor: default; }
@@ -82,7 +82,7 @@
   // ═══════════════════════════════════════════════════════════════════
   const GOOGLE_CLIENT_ID = "738539572204-4geimkgdih2m79bibg6koejj8tuoiad6.apps.googleusercontent.com";
   const SCOPES = "https://www.googleapis.com/auth/drive.file";
-  const APP_VERSION = "2.62.0";
+  const APP_VERSION = "2.63.0";
   const LOCAL_STORAGE_KEY = "workit_state";
   const APP_BUILD_DATE = "2026-03-06";
   const SPREADSHEET_NAME = "Workout Tracker Data";
