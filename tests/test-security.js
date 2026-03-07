@@ -54,7 +54,7 @@ if (cspMatch) {
 
   // script-src should allow the specific CDNs we use
   assert(csp.includes("script-src"), "CSP has script-src directive");
-  assert(csp.includes("https://unpkg.com"), "CSP script-src allows unpkg.com for React");
+  assert(csp.includes("https://cdn.jsdelivr.net"), "CSP script-src allows cdn.jsdelivr.net for React");
   assert(csp.includes("https://accounts.google.com"), "CSP script-src allows accounts.google.com for OAuth");
 
   // style-src should allow inline styles
@@ -83,11 +83,11 @@ if (cspMatch) {
 console.log("\n▸ SRI hash ↔ URL pairing");
 
 // React
-const reactScript = html.match(/<script[^>]*src="https:\/\/unpkg\.com\/react@18\.2\.0\/umd\/react\.production\.min\.js"[^>]*/);
+const reactScript = html.match(/<script[^>]*src="https:\/\/cdn\.jsdelivr\.net\/npm\/react@18\.2\.0\/umd\/react\.production\.min\.js"[^>]*/);
 assert(!!reactScript && reactScript[0].includes("integrity="), "React script tag has both src and integrity");
 
 // React-DOM
-const reactDomScript = html.match(/<script[^>]*src="https:\/\/unpkg\.com\/react-dom@18\.2\.0\/umd\/react-dom\.production\.min\.js"[^>]*/);
+const reactDomScript = html.match(/<script[^>]*src="https:\/\/cdn\.jsdelivr\.net\/npm\/react-dom@18\.2\.0\/umd\/react-dom\.production\.min\.js"[^>]*/);
 assert(!!reactDomScript && reactDomScript[0].includes("integrity="), "React-DOM script tag has both src and integrity");
 
 // No Tailwind — removed (unused CDN dependency)

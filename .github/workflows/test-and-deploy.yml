@@ -21,8 +21,8 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
       - run: bash tests/run-tests.sh
@@ -36,7 +36,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Prepare site artifact
         run: |
           mkdir _site
@@ -44,9 +44,14 @@ jobs:
           sed -i "s/const VERSION = '.*'/const VERSION = '$VERSION'/" sw.js
           npx --yes html-minifier-terser --collapse-whitespace --remove-comments --minify-css true --minify-js true index.html -o _site/index.html
           cp manifest.json sw.js icon.svg _site/
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Size budget check
+        run: |
+          SIZE=$(wc -c < _site/index.html)
+          echo "Minified size: ${SIZE} bytes"
+          if [ "$SIZE" -gt 200000 ]; then echo "ERROR: index.html exceeds 200KB budget (${SIZE} bytes)" && exit 1; fi
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

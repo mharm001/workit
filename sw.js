@@ -1,12 +1,11 @@
 const VERSION = '2.49.0';
 const CACHE_NAME = 'workit-v' + VERSION;
 const ASSETS = [
-  './',
   './index.html',
   './icon.svg',
   './manifest.json',
-  'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
-  'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js'
+  'https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js',
+  'https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js'
 ];
 
 self.addEventListener('install', e => {
